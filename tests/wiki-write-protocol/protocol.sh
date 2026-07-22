@@ -1,0 +1,1 @@
+../../core/scripts/wiki-write-protocol/protocol.sh

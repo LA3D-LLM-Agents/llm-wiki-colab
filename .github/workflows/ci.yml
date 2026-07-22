@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install KG deps (optional)
+        run: pip install rdflib pyshacl pyyaml || true
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name ci
+          git config --global user.email ci@example.com
+          git config --global init.defaultBranch main
+
+      - name: Run test suite
+        run: bash tests/run.sh
+
+      - name: Packaging drift guard
+        run: |
+          bash adapters/claude-code/package.sh
+          if ! git diff --quiet -- adapters/claude-code/core; then
+            echo "adapters/claude-code/core is out of sync with root core/ — run adapters/claude-code/package.sh and commit."
+            git --no-pager diff --stat -- adapters/claude-code/core
+            exit 1
+          fi
