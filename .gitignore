@@ -1,4 +1,6 @@
 .DS_Store
 core/scripts/kg/build/
-# Packaged copy of the shared core, assembled by adapters/claude-code/package.sh
-adapters/claude-code/core/
+# The adapter ships a committed copy of core/ so the marketplace install is
+# self-contained (package.sh re-syncs it from the root canonical core/).
+# Only the KG build output inside it is ignored.
+adapters/claude-code/core/scripts/kg/build/
