@@ -28,11 +28,13 @@ assert_contains "$out" "Verification Gate" "PostToolUse advisory on wiki write"
 out="$(printf '{"tool_input":{"file_path":"src/main.py"}}' | bash "$HOOKS/posttooluse.sh")"
 assert_empty "$out" "PostToolUse silent outside .llm-wiki/"
 
-# 4. ensure-wiki state-3: origin with no GitHub wiki -> create-first-page prompt, no attach.
-d="$(mk_scratch https://github.com/this-owner-does-not-exist-zzz/no-such-repo.git)"
+# 4. Opt-in: a repo WITH a GitHub wiki but no .llm-wiki/ stays silent (no auto-clone).
+#    Points at a real wiki-bearing repo; the opt-in hook returns before any
+#    network, so this is deterministic and offline. Attaching is /wiki-init's job.
+d="$(mk_scratch https://github.com/chrissweet/llm-wiki-vision.git)"
 out="$(cd "$d" && python3 "$HOOKS/ensure-wiki.py" 2>/dev/null)"
-assert_contains "$out" "no GitHub wiki yet" "ensure-wiki state-3 create-first-page prompt"
-assert_no_file "$d/.llm-wiki" "state-3 does not attach anything"
+assert_empty "$out" "ensure-wiki silent when .llm-wiki absent (no auto-clone even if a GitHub wiki exists)"
+assert_no_file "$d/.llm-wiki" "ensure-wiki does not attach; that is /wiki-init's job"
 rm -rf "$d"
 
 exit "$ASSERT_FAIL"
