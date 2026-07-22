@@ -14,6 +14,7 @@ for f in \
     core/agents/discipline-gates.md \
     core/agents/wiki-write-protocol.md \
     core/scripts/wiki-write-protocol/protocol.sh \
+    core/scripts/wiki-doctor.sh \
     core/scripts/kg/build-graph.sh \
     core/templates/guidance.md \
     hooks/ensure-wiki.py \
