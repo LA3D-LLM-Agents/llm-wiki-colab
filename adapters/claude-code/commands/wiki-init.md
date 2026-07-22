@@ -27,6 +27,7 @@ main repo.
 
 Report which state was taken and the resulting wiki path.
 
-> NOTE (v1 skeleton): `core/init-wiki.sh` is still the upstream copy and needs
-> the plugin-era changes in `BUILD-NOTES.md` (repath to `.llm-wiki/`, drop its
-> `CLAUDE.md` writer, rework WIKI-INDEX) before it is run unmodified.
+> `core/init-wiki.sh` has been adapted for the plugin model (memory at
+> `.llm-wiki/`, no `CLAUDE.md` writer, no WIKI-INDEX registration, auto-adds the
+> `.gitignore` line) and smoke-tested in create mode. The `--github` clone path
+> (state 2 against a real GitHub wiki) still needs an end-to-end check.

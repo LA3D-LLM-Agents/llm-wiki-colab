@@ -80,7 +80,7 @@ done
 # --- Load shared library ---
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../scripts/lib/common.sh
-source "$HERE/../scripts/lib/common.sh"
+source "$HERE/scripts/lib/common.sh"
 
 # --- Detect project identity ---
 # Two distinct names, kept separate on purpose so they cannot silently
@@ -113,7 +113,7 @@ else
     BY_LINE="- by: ${WIKI_USER}"
 fi
 
-WIKI_DIR="$REPO_ROOT/wiki/${REPO_NAME}.wiki"
+WIKI_DIR="$REPO_ROOT/.llm-wiki"
 
 # Namespaced file names
 HOME_NS="Home_${REPO_NAME}"
@@ -785,181 +785,16 @@ fi
 # create-or-overwrite, idempotent on update mode.
 stamp_wiki_templates
 
-# --- WIKI-INDEX: recursive registration ---
-# Walk up from the wiki directory, creating/updating WIKI-INDEX files
-register_in_wiki_index() {
-    local wiki_dir="$1"
-    local wiki_name="$2"
-    local home_page="$3"
-    local description="$4"
+# --- WIKI-INDEX registration and CLAUDE.md writing removed for the plugin model ---
+# WIKI-INDEX assumed a wiki/ parent and would write WIKI-INDEX.md into the
+# project root; CLAUDE.md injection is replaced by the SessionStart hook. The
+# project repo therefore stays free of vendor config.
 
-    local parent_dir
-    parent_dir="$(dirname "$wiki_dir")"
-    local parent_name
-    parent_name="$(basename "$parent_dir")"
-
-    # Determine the index filename for this level
-    # Top-level "wiki/" gets bare WIKI-INDEX.md
-    # Sub-collections get WIKI-INDEX_${collection_name}.md
-    local index_file
-    if [[ "$parent_name" == "wiki" ]]; then
-        index_file="$parent_dir/WIKI-INDEX.md"
-    else
-        index_file="$parent_dir/WIKI-INDEX_${parent_name}.md"
-    fi
-
-    # Create the index file if it doesn't exist
-    if [[ ! -f "$index_file" ]]; then
-        local index_basename
-        index_basename="$(basename "$index_file" .md)"
-        cat > "$index_file" << WIKIIDXEOF
----
-type: index
----
-
-# Wiki Index — ${parent_name}
-
-## Wikis
-- [[${home_page}]] — ${description}
-WIKIIDXEOF
-        echo "Created $index_file"
-    else
-        # Add entry if not already present
-        if ! grep -qF "[[${home_page}]]" "$index_file"; then
-            # Find the Wikis section and append, or just append
-            if grep -qF "## Wikis" "$index_file"; then
-                # Append directly under the Wikis heading. Uses lw_append_after
-                # (awk) because BSD/macOS sed rejects the 'Na\' append form.
-                lw_append_after "$index_file" "## Wikis" "- [[${home_page}]] — ${description}"
-            else
-                printf '\n## Wikis\n- [[%s]] — %s\n' "${home_page}" "${description}" >> "$index_file"
-            fi
-            echo "Registered ${wiki_name} in $(basename "$index_file")"
-        else
-            echo "$(basename "$index_file") already has entry for ${wiki_name}"
-        fi
-    fi
-
-    # Recurse up: register this collection's index in the grandparent
-    local grandparent_dir
-    grandparent_dir="$(dirname "$parent_dir")"
-    local grandparent_name
-    grandparent_name="$(basename "$grandparent_dir")"
-    local index_basename
-    index_basename="$(basename "$index_file" .md)"
-
-    # Stop recursion at repo root or if we've left the wiki/ tree
-    if [[ "$grandparent_dir" == "$REPO_ROOT" ]] || [[ "$grandparent_dir" == "/" ]]; then
-        return
-    fi
-
-    # Check if grandparent has a WIKI-INDEX to register in
-    local grandparent_index
-    if [[ "$grandparent_name" == "wiki" ]]; then
-        grandparent_index="$grandparent_dir/WIKI-INDEX.md"
-    else
-        grandparent_index="$grandparent_dir/WIKI-INDEX_${grandparent_name}.md"
-    fi
-
-    if [[ -f "$grandparent_index" ]] || [[ "$grandparent_name" == "wiki" ]]; then
-        # Register this collection in the grandparent
-        if [[ ! -f "$grandparent_index" ]]; then
-            cat > "$grandparent_index" << GPIDXEOF
----
-type: index
----
-
-# Wiki Index
-
-## Collections
-- [[${index_basename}]] — ${parent_name} wikis
-GPIDXEOF
-            echo "Created $grandparent_index"
-        elif ! grep -qF "[[${index_basename}]]" "$grandparent_index"; then
-            if grep -qF "## Collections" "$grandparent_index"; then
-                # Append directly under the Collections heading. Uses
-                # lw_append_after (awk); BSD/macOS sed rejects 'Na\'.
-                lw_append_after "$grandparent_index" "## Collections" "- [[${index_basename}]] — ${parent_name} wikis"
-            else
-                printf '\n## Collections\n- [[%s]] — %s wikis\n' "${index_basename}" "${parent_name}" >> "$grandparent_index"
-            fi
-            echo "Registered ${parent_name} collection in $(basename "$grandparent_index")"
-        fi
-    fi
-}
-
-# Register this wiki in the WIKI-INDEX hierarchy
-register_in_wiki_index "$WIKI_DIR" "$REPO_NAME" "$HOME_NS" "$PROJECT_NAME wiki"
-
-# --- CLAUDE.md: create or update ---
-CLAUDE_MD="$REPO_ROOT/CLAUDE.md"
-CLAUDE_UPDATED=()
-
-WIKI_SECTION="## Wiki
-
-This project maintains a **persistent wiki** at \`wiki/${REPO_NAME}.wiki/\` (separate git repo) following the [llm-wiki pattern](https://github.com/tobi/llm-wiki). The wiki is an LLM-maintained, interlinked knowledge base that compounds over time.
-
-**Read \`wiki/${REPO_NAME}.wiki/${SCHEMA_NS}.md\` before making wiki changes.** It defines page formats, frontmatter conventions, cross-referencing, and the three operations:
-
-- **Ingest**: After completing significant work, update the wiki (create/update pages, cross-references, \`${INDEX_NS}.md\`, \`${LOG_NS}.md\`).
-- **Query**: When answering analytical questions, search the wiki first (\`${INDEX_NS}.md\` → relevant pages). File valuable answers as new pages.
-- **Lint**: Periodically health-check for orphan pages, stale claims, missing cross-references, and missing frontmatter."
-
-KG_SUBSECTION="### Knowledge Graph
-
-The wiki's frontmatter and body links feed a knowledge graph pipeline (\`scripts/kg/\`) that produces a SPARQL-queryable RDF graph from wiki content. The pipeline runs in Python via rdflib and pyshacl; no separate server is required by default.
-
-- **Rebuild**: \`./scripts/kg/build-graph.sh\` after wiki updates
-- **Query (default)**: in-process via rdflib against \`scripts/kg/build/graph-full.ttl\`. Agent tool wrappers run SPARQL queries directly against the loaded graph object.
-- **Query (optional)**: load \`graph-full.ttl\` into Apache Jena Fuseki for live multi-client query, agent-write via SPARQL UPDATE, or federation across wikis. rdflib talks to a Fuseki endpoint via \`SPARQLStore\` without changes to tool code.
-- Typed edges in frontmatter (\`extends:\`, \`supports:\`, \`criticizes:\`) produce rich graph relationships
-- Body cross-references (\`[text](Page-Name)\`) produce \`mentions\` edges
-- Pages without frontmatter are included as \`untyped\` nodes — no data is lost"
-
-if [[ -f "$CLAUDE_MD" ]]; then
-    if ! grep -qF "## Wiki" "$CLAUDE_MD"; then
-        printf '\n---\n\n%s\n' "$WIKI_SECTION" >> "$CLAUDE_MD"
-        CLAUDE_UPDATED+=("Wiki section")
-    else
-        # Wiki section exists — check for missing content within it
-
-        if grep -qF "missing cross-references." "$CLAUDE_MD" && ! grep -qF "missing frontmatter" "$CLAUDE_MD"; then
-            lw_sed_inplace 's/missing cross-references\./missing cross-references, and missing frontmatter./' "$CLAUDE_MD"
-            CLAUDE_UPDATED+=("Updated Lint line to include frontmatter checks")
-        fi
-
-        if ! grep -qF "${SCHEMA_NS}.md" "$CLAUDE_MD"; then
-            SCHEMA_LINE="**Read \`wiki/${REPO_NAME}.wiki/${SCHEMA_NS}.md\` before making wiki changes.** It defines page formats, frontmatter conventions, cross-referencing, and the three operations (Ingest, Query, Lint)."
-            if append_section_if_missing "$CLAUDE_MD" "${SCHEMA_NS}.md" "$SCHEMA_LINE"; then
-                CLAUDE_UPDATED+=("Namespaced SCHEMA reference")
-            fi
-        fi
-    fi
-
-    if ! grep -qF "### Knowledge Graph" "$CLAUDE_MD"; then
-        printf '\n%s\n' "$KG_SUBSECTION" >> "$CLAUDE_MD"
-        CLAUDE_UPDATED+=("Knowledge Graph subsection")
-    fi
-else
-    cat > "$CLAUDE_MD" << CLAUDEEOF
-# CLAUDE.md
-
-> Context file for AI assistants working on this project.
-
-$WIKI_SECTION
-
-$KG_SUBSECTION
-CLAUDEEOF
-    CLAUDE_UPDATED+=("Created CLAUDE.md with Wiki + Knowledge Graph sections")
-fi
-
-if [[ ${#CLAUDE_UPDATED[@]} -gt 0 ]]; then
-    echo "Updated CLAUDE.md:"
-    for s in "${CLAUDE_UPDATED[@]}"; do
-        echo "  + $s"
-    done
-else
-    echo "CLAUDE.md already up to date."
+# --- Ensure .llm-wiki/ is gitignored in the project repo ---
+GITIGNORE="$REPO_ROOT/.gitignore"
+if ! { [[ -f "$GITIGNORE" ]] && grep -qxF ".llm-wiki/" "$GITIGNORE"; }; then
+    printf '%s\n' ".llm-wiki/" >> "$GITIGNORE"
+    echo "Added .llm-wiki/ to $GITIGNORE"
 fi
 
 # --- Commit changes in wiki repo ---
