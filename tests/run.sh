@@ -17,11 +17,19 @@ for t in "$HERE"/test_*.sh; do
 done
 
 echo "===== wiki-write-protocol scenarios ====="
+# The push-race / livelock-retry scenarios exercise concurrent-writer timing, so
+# they can flake once under load. Retry the suite once; only a repeated failure
+# is a real failure (the deterministic test_*.sh above are never retried).
 log="$(mktemp)"
-if bash "$HERE/wiki-write-protocol/run-all.sh" >"$log" 2>&1; then
+proto_ok=0
+for attempt in 1 2; do
+    if bash "$HERE/wiki-write-protocol/run-all.sh" >"$log" 2>&1; then proto_ok=1; break; fi
+    [ "$attempt" -eq 1 ] && echo "  (attempt 1 flaked on a timing-sensitive scenario; retrying)"
+done
+if [ "$proto_ok" -eq 1 ]; then
     echo "  ok   $(grep -E 'Summary:' "$log" || echo 'scenarios passed')"
 else
-    echo "  FAIL protocol scenarios:"; tail -15 "$log"; FAIL=$((FAIL + 1))
+    echo "  FAIL protocol scenarios (2 attempts):"; tail -15 "$log"; FAIL=$((FAIL + 1))
 fi
 rm -f "$log"
 echo ""

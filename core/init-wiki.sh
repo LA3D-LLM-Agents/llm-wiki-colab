@@ -799,12 +799,14 @@ stamp_wiki_templates
 # project root; CLAUDE.md injection is replaced by the SessionStart hook. The
 # project repo therefore stays free of vendor config.
 
-# --- Ensure .llm-wiki/ is gitignored in the project repo ---
+# --- Ensure the memory dir (and its clone-staging dir) are gitignored ---
 GITIGNORE="$REPO_ROOT/.gitignore"
-if ! { [[ -f "$GITIGNORE" ]] && grep -qxF ".llm-wiki/" "$GITIGNORE"; }; then
-    printf '%s\n' ".llm-wiki/" >> "$GITIGNORE"
-    echo "Added .llm-wiki/ to $GITIGNORE"
-fi
+for pat in ".llm-wiki/" ".llm-wiki-clone-*"; do
+    if ! { [[ -f "$GITIGNORE" ]] && grep -qxF "$pat" "$GITIGNORE"; }; then
+        printf '%s\n' "$pat" >> "$GITIGNORE"
+        echo "Added $pat to $GITIGNORE"
+    fi
+done
 
 # --- Commit changes in wiki repo ---
 cd "$WIKI_DIR"

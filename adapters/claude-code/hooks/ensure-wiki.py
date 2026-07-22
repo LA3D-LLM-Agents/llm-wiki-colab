@@ -92,15 +92,16 @@ def try_clone(cmd: List[str], repo_root: Path, wiki_rel: str) -> bool:
     rename wins and the rest find the path already populated.
 
     The staging dir is a sibling of the canonical path (same filesystem, so
-    the rename is atomic) and is named "*.wiki" so the repo's `wiki/*.wiki/`
-    ignore covers it during the clone window. The clone targets a child of the
-    staging dir so the VCS creates its own destination rather than cloning into
-    the pre-existing (and for some tools non-empty) staging dir itself.
+    the rename is atomic) and is named ".llm-wiki-clone-*", which the
+    ".llm-wiki-clone-*" line ensure_gitignore writes covers during the clone
+    window. The clone targets a child of the staging dir so the VCS creates its
+    own destination rather than cloning into the pre-existing (and for some
+    tools non-empty) staging dir itself.
     """
     final_dest = repo_root / wiki_rel
     parent = final_dest.parent
     parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".ensure-wiki-", suffix=".wiki", dir=parent))
+    staging = Path(tempfile.mkdtemp(prefix=".llm-wiki-clone-", dir=parent))
     clone_target = staging / "repo"
     # detect_clone_command always puts the destination last; swap it for the
     # staging target while leaving the user-facing command (for the nudge)
@@ -290,12 +291,15 @@ def ensure_gitignore(repo_root: Path) -> None:
     line is ensured here too. Idempotent and best-effort (never fails the hook).
     """
     gi = repo_root / ".gitignore"
-    line = ".llm-wiki/"
+    # The memory dir, plus the transient staging dir try_clone stages beside it.
+    wanted = [".llm-wiki/", ".llm-wiki-clone-*"]
     try:
         content = gi.read_text() if gi.exists() else ""
-        if line not in content.splitlines():
+        existing = content.splitlines()
+        missing = [ln for ln in wanted if ln not in existing]
+        if missing:
             sep = "" if content == "" or content.endswith("\n") else "\n"
-            gi.write_text(content + sep + line + "\n")
+            gi.write_text(content + sep + "\n".join(missing) + "\n")
     except OSError:
         pass
 
