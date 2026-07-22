@@ -1,0 +1,4 @@
+.DS_Store
+core/scripts/kg/build/
+# Packaged copy of the shared core, assembled by adapters/claude-code/package.sh
+adapters/claude-code/core/
