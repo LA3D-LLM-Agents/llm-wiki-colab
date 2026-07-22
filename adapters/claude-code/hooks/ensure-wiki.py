@@ -281,6 +281,59 @@ def emit(message: str) -> None:
     )
 
 
+def ensure_gitignore(repo_root: Path) -> None:
+    """Ensure the project .gitignore ignores the .llm-wiki/ memory dir.
+
+    The memory is a separate checkout inside the project tree and must not be
+    tracked by the main repo. init-wiki.sh adds this line, but a fresh-machine
+    clone is auto-attached by this hook WITHOUT running init-wiki.sh, so the
+    line is ensured here too. Idempotent and best-effort (never fails the hook).
+    """
+    gi = repo_root / ".gitignore"
+    line = ".llm-wiki/"
+    try:
+        content = gi.read_text() if gi.exists() else ""
+        if line not in content.splitlines():
+            sep = "" if content == "" or content.endswith("\n") else "\n"
+            gi.write_text(content + sep + line + "\n")
+    except OSError:
+        pass
+
+
+def wiki_remote_exists(wiki_url: str) -> bool:
+    """True if the GitHub wiki repo has refs. A GitHub project wiki is not
+    clonable until the Wiki feature is enabled and a first page exists, so an
+    empty or failed ls-remote means 'no wiki yet', distinct from an auth or
+    network failure against an existing wiki."""
+    env = {
+        **os.environ,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_SSH_COMMAND": "ssh -oBatchMode=yes",
+    }
+    try:
+        out = subprocess.run(
+            ["git", "ls-remote", wiki_url],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=UPDATE_TIMEOUT_SECONDS,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return False
+    return out.returncode == 0 and bool(out.stdout.strip())
+
+
+def github_slug(origin: str) -> Optional[str]:
+    """owner/repo from a GitHub origin URL (https or scp form); None if unparseable."""
+    s = origin[:-4] if origin.endswith(".git") else origin
+    s = s.rstrip("/")
+    if "://" in s:
+        s = s.split("://", 1)[1].split("/", 1)[-1]
+    elif "@" in s and ":" in s:
+        s = s.split(":", 1)[1]
+    return s or None
+
+
 def main() -> int:
     # Resolve the repo root; bail quietly if we are not in a working tree.
     root = git("rev-parse", "--show-toplevel")
@@ -312,6 +365,7 @@ def main() -> int:
         # atomic rename in try_clone, so its existence means a complete
         # checkout, never a half-written clone). Try to fast-forward it to
         # upstream; stay silent unless it is behind and cannot be advanced.
+        ensure_gitignore(repo_root)
         message = update_wiki(wiki_dir)
         if message:
             emit(message)
@@ -325,11 +379,30 @@ def main() -> int:
 
     cmd = detect_clone_command(repo_root, wiki_url, wiki_rel)
     if cmd and try_clone(cmd, repo_root, wiki_rel):
-        # Cloned successfully; stay silent and let the wiki-surfacing hook run.
+        # Cloned successfully; ensure the ignore line, stay silent, and let the
+        # wiki-surfacing hook run.
+        ensure_gitignore(repo_root)
         return 0
 
-    # Clone unavailable or failed: ask the agent to do it, naming the exact
-    # command for this repo's VCS (falling back to plain wording if unknown).
+    # Clone unavailable or failed. Distinguish "no GitHub wiki exists yet"
+    # (state 3) from a transient/auth failure on an existing wiki (state 2).
+    if not wiki_remote_exists(wiki_url):
+        slug = github_slug(origin)
+        new_page = (
+            f"https://github.com/{slug}/wiki/_new"
+            if slug
+            else f"{wiki_url} (create the first page)"
+        )
+        emit(
+            f"This repo has no GitHub wiki yet, so there is no durable-memory "
+            f"wiki to attach. Enable the repo Wiki and create the first page "
+            f"({new_page}); then re-run /wiki-init or restart the session and it "
+            f"will attach at {wiki_rel}/."
+        )
+        return 0
+
+    # Wiki exists but could not be cloned (auth/network): nudge the agent to do
+    # it, naming the exact command for this repo's VCS.
     how = f"with `{' '.join(cmd)}`" if cmd else f"from {wiki_url}"
     emit(
         f"The project's durable-memory wiki could not be auto-cloned to "

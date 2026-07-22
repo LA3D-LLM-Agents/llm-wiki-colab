@@ -221,6 +221,15 @@ if [[ "$MODE" == "create" ]]; then
             echo "Initialized local wiki repo at $WIKI_DIR"
         fi
     fi
+
+    # A --github clone of an ALREADY-POPULATED wiki must not be re-scaffolded in
+    # create mode: the create-mode SCHEMA heredoc would overwrite a customized
+    # SCHEMA. Re-detect after the clone; a wiki that already carries its SCHEMA
+    # switches to update mode (append-missing-only, never overwrite).
+    if [[ -f "$WIKI_DIR/${SCHEMA_NS}.md" ]] || [[ -f "$WIKI_DIR/SCHEMA.md" ]]; then
+        MODE="update"
+        echo "Cloned wiki already has a SCHEMA — switching to update mode (no overwrite)."
+    fi
 fi
 
 # --- Write Home_${REPO_NAME}.md (create only — never overwrite) ---
