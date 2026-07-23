@@ -3,18 +3,20 @@
 # Claude Code SessionStart hook (llm-wiki plugin): surface the project's wiki
 # as durable memory at the start of a session.
 #
-# Opt-in contract: this hook is SILENT unless a gitignored .llm-wiki/ exists at
-# the repo root. Because the plugin installs per machine, its hook fires in
-# every repo; only repos that ran /wiki-init (which creates .llm-wiki/) get
-# oriented. A plain repo gets nothing, no nagging.
+# Opt-in contract: SILENT unless a gitignored .llm-wiki/ exists at the repo root.
+# The plugin installs per machine, so this hook fires in every repo; only repos
+# that ran /wiki-init (which creates .llm-wiki/) are oriented. A plain repo gets
+# nothing, no nagging, and it never announces "no wiki".
 #
-# When .llm-wiki/ is present it emits, to stdout (captured as a system-reminder):
-#   0. A one-line status announcement (the model is asked to surface it), so the
-#      user sees at session start that the wiki is active + its page count.
-#   1. Orientation + the memory-boundary / wiki-maintenance guidance.
-#   2. The wiki index (catalog of pages), if present.
-#   3. The last 5 log entries, for cross-session continuity.
-# The absent case stays silent (opt-in), so it never announces "no wiki".
+# When .llm-wiki/ is present the hook emits a SINGLE JSON object on stdout:
+#   - systemMessage (top-level): a one-line status banner the USER sees at
+#     session start. Claude Code renders this directly, so it does not depend on
+#     the model choosing to repeat injected context.
+#   - hookSpecificOutput.additionalContext: orientation + the memory-boundary /
+#     wiki-maintenance guidance + the wiki index + the last 5 log entries, all
+#     injected into the model's context.
+# When a hook emits JSON, stdout must be ONLY the JSON (plain text is ignored),
+# so every model-facing block goes through additionalContext, not bare stdout.
 #
 # The namespace is derived from origin at runtime (no install-time bake), so a
 # single static plugin copy works in any repo. Internal wiki files stay
@@ -42,24 +44,16 @@ ORIGIN="$(git remote get-url origin 2>/dev/null || true)"
 REPO_NAME="$(name_from_origin "$ORIGIN")"
 [[ -n "$REPO_NAME" ]] || REPO_NAME="$(basename "$PWD")"
 
-# Counts for the status announcement.
 PAGE_COUNT=$(find "$WIKI_DIR" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-LOG_COUNT=$(grep -c '^## \[' "$WIKI_DIR/log_${REPO_NAME}.md" 2>/dev/null || echo 0)
+LOG_FILE="$WIKI_DIR/log_${REPO_NAME}.md"
+LOG_COUNT=$(grep -c '^## \[' "$LOG_FILE" 2>/dev/null || echo 0)
 
-# Block 0: status announcement. Surfaced to the user (the model is asked to say
-# it out loud); the absent case stays silent above, so this only ever announces
-# a wiki that exists.
-cat <<EOF
-<system-reminder>
-llm-wiki: memory ACTIVE for this repo. A wiki is attached at .llm-wiki/
-(namespace ${REPO_NAME}, ${PAGE_COUNT} pages, ${LOG_COUNT} log entries). Open
-your first reply of this session with one short line telling the user the
-llm-wiki is active and its page count, then address their request normally.
-</system-reminder>
-EOF
+# The user-visible banner (top-level systemMessage).
+BANNER="llm-wiki: durable memory active in ${REPO_NAME} (${PAGE_COUNT} pages, ${LOG_COUNT} log entries)"
 
-# Block 1: orientation.
-cat <<EOF
+# Build the model-facing context (goes into additionalContext).
+CONTEXT="$(
+    cat <<EOF
 <system-reminder>
 This project uses the wiki at .llm-wiki/ as durable memory. It is a separate
 git repository with its own remote, NOT tracked by the main repo. Read
@@ -76,38 +70,51 @@ Slash commands: /wiki-init, /wiki-experiment, /wiki-source, /wiki-lint, /wiki-do
 </system-reminder>
 EOF
 
-# Fold in the memory-boundary / wiki-maintenance guidance shipped with the plugin.
-GUIDANCE="${CLAUDE_PLUGIN_ROOT:-}/core/templates/guidance.md"
-if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "$GUIDANCE" ]]; then
-    echo
-    echo "<system-reminder>"
-    cat "$GUIDANCE"
-    echo "</system-reminder>"
-fi
-
-# Block 2: wiki index.
-INDEX_FILE="$WIKI_DIR/index_${REPO_NAME}.md"
-if [[ -f "$INDEX_FILE" ]]; then
-    echo
-    echo "<system-reminder>"
-    echo "## Wiki current state — index"
-    echo
-    cat "$INDEX_FILE"
-    echo "</system-reminder>"
-fi
-
-# Block 3: last 5 log entries (append-only, newest at the bottom).
-LOG_FILE="$WIKI_DIR/log_${REPO_NAME}.md"
-if [[ -f "$LOG_FILE" ]]; then
-    TOTAL_ENTRIES=$(grep -c '^## \[' "$LOG_FILE" 2>/dev/null || echo 0)
-    START_ENTRY=1
-    if [[ "$TOTAL_ENTRIES" -gt 5 ]]; then
-        START_ENTRY=$((TOTAL_ENTRIES - 4))
+    # Fold in the memory-boundary / wiki-maintenance guidance shipped with the plugin.
+    GUIDANCE="${CLAUDE_PLUGIN_ROOT:-}/core/templates/guidance.md"
+    if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "$GUIDANCE" ]]; then
+        echo
+        echo "<system-reminder>"
+        cat "$GUIDANCE"
+        echo "</system-reminder>"
     fi
-    echo
-    echo "<system-reminder>"
-    echo "## Wiki current state — last 5 log entries"
-    echo
-    awk -v s="$START_ENTRY" '/^## \[/{c++} c>=s' "$LOG_FILE"
-    echo "</system-reminder>"
-fi
+
+    # Wiki index (catalog of pages).
+    INDEX_FILE="$WIKI_DIR/index_${REPO_NAME}.md"
+    if [[ -f "$INDEX_FILE" ]]; then
+        echo
+        echo "<system-reminder>"
+        echo "## Wiki current state: index"
+        echo
+        cat "$INDEX_FILE"
+        echo "</system-reminder>"
+    fi
+
+    # Last 5 log entries (append-only; newest at the bottom).
+    if [[ -f "$LOG_FILE" ]]; then
+        START_ENTRY=1
+        if [[ "$LOG_COUNT" -gt 5 ]]; then
+            START_ENTRY=$((LOG_COUNT - 4))
+        fi
+        echo
+        echo "<system-reminder>"
+        echo "## Wiki current state: last 5 log entries"
+        echo
+        awk -v s="$START_ENTRY" '/^## \[/{c++} c>=s' "$LOG_FILE"
+        echo "</system-reminder>"
+    fi
+)"
+
+# Emit the single JSON object. stdout must be ONLY this JSON. python3 is already
+# a SessionStart dependency (ensure-wiki.py), so this adds no new requirement and
+# handles all string escaping safely.
+LW_BANNER="$BANNER" LW_CONTEXT="$CONTEXT" python3 -c '
+import json, os
+print(json.dumps({
+    "systemMessage": os.environ["LW_BANNER"],
+    "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": os.environ["LW_CONTEXT"],
+    },
+}))
+'

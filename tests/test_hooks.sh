@@ -16,10 +16,17 @@ mkdir -p "$d/.llm-wiki"
 printf '# Index\n- page Alpha\n' > "$d/.llm-wiki/index_bar.md"
 { echo "# Log"; for n in 1 2 3 4 5 6 7; do echo "## [2026-07-0$n] e | E$n"; echo "- body"; done; } > "$d/.llm-wiki/log_bar.md"
 out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$ROOT/adapters/claude-code" bash "$HOOKS/session-start.sh")"
-assert_contains "$out" "memory ACTIVE" "status announcement emitted when a wiki is attached"
-assert_contains "$out" "2 pages, 7 log entries" "status reports page and log counts"
-assert_contains "$out" "durable memory" "orientation emitted"
-assert_contains "$out" "page Alpha" "index emitted"
+# Output must be a single valid JSON object (plain stdout would be ignored by CC).
+printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null \
+    && _pass "SessionStart emits a single valid JSON object" \
+    || _fail "SessionStart output is not valid JSON"
+# Visible banner rides top-level systemMessage (rendered to the user, not the model).
+assert_contains "$out" '"systemMessage"' "banner uses the top-level systemMessage field"
+assert_contains "$out" "durable memory active" "banner announces the wiki is active"
+assert_contains "$out" "2 pages, 7 log entries" "banner reports page and log counts"
+# Model-facing context rides hookSpecificOutput.additionalContext.
+assert_contains "$out" '"additionalContext"' "model context uses additionalContext"
+assert_contains "$out" "page Alpha" "index folded into additionalContext"
 assert_contains "$out" "E7" "last-5 includes newest entry"
 assert_not_contains "$out" "| E2" "last-5 excludes the 6th-newest and older"
 rm -rf "$d"
