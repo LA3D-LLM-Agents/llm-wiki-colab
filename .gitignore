@@ -4,3 +4,4 @@ core/scripts/kg/build/
 # self-contained (package.sh re-syncs it from the root canonical core/).
 # Only the KG build output inside it is ignored.
 adapters/claude-code/core/scripts/kg/build/
+.llm-wiki/
