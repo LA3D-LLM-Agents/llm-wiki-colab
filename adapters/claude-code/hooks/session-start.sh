@@ -9,9 +9,12 @@
 # oriented. A plain repo gets nothing, no nagging.
 #
 # When .llm-wiki/ is present it emits, to stdout (captured as a system-reminder):
+#   0. A one-line status announcement (the model is asked to surface it), so the
+#      user sees at session start that the wiki is active + its page count.
 #   1. Orientation + the memory-boundary / wiki-maintenance guidance.
 #   2. The wiki index (catalog of pages), if present.
 #   3. The last 5 log entries, for cross-session continuity.
+# The absent case stays silent (opt-in), so it never announces "no wiki".
 #
 # The namespace is derived from origin at runtime (no install-time bake), so a
 # single static plugin copy works in any repo. Internal wiki files stay
@@ -38,6 +41,22 @@ name_from_origin() {
 ORIGIN="$(git remote get-url origin 2>/dev/null || true)"
 REPO_NAME="$(name_from_origin "$ORIGIN")"
 [[ -n "$REPO_NAME" ]] || REPO_NAME="$(basename "$PWD")"
+
+# Counts for the status announcement.
+PAGE_COUNT=$(find "$WIKI_DIR" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+LOG_COUNT=$(grep -c '^## \[' "$WIKI_DIR/log_${REPO_NAME}.md" 2>/dev/null || echo 0)
+
+# Block 0: status announcement. Surfaced to the user (the model is asked to say
+# it out loud); the absent case stays silent above, so this only ever announces
+# a wiki that exists.
+cat <<EOF
+<system-reminder>
+llm-wiki: memory ACTIVE for this repo. A wiki is attached at .llm-wiki/
+(namespace ${REPO_NAME}, ${PAGE_COUNT} pages, ${LOG_COUNT} log entries). Open
+your first reply of this session with one short line telling the user the
+llm-wiki is active and its page count, then address their request normally.
+</system-reminder>
+EOF
 
 # Block 1: orientation.
 cat <<EOF
