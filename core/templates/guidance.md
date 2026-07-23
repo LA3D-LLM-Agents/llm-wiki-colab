@@ -11,7 +11,7 @@ When a fact emerges and the destination is unclear, ask: does it follow the user
 
 The wiki is this project's durable memory. Read it to recall context; write to it to remember. Apply this in both directions, proactively, without waiting to be asked.
 
-- **Read** the wiki when project context would help an answer: start at the index, then drill into named pages. Cite page names when synthesizing. If a wiki claim conflicts with current code or results, trust what is observed now and flag the stale page rather than repeating it.
+- **Read** the wiki when project context would help an answer. The index (page catalog) and the last 5 log entries are injected into your context at session start, so you already hold the wiki's current state, there is no need to re-open the index file to see what exists or what changed; drill into named `.llm-wiki/` page files for their bodies. Cite page names when synthesizing. If a wiki claim conflicts with current code or results, trust what is observed now and flag the stale page rather than repeating it.
 - **Write** to the wiki whenever significant work produces something a future session would benefit from: experiment results (config, metrics, what changed, what surprised), decisions with stated reasons, reusable syntheses, contradictions of prior claims. Follow the Ingest procedure in the wiki's `SCHEMA` file.
 
 **Finish the cycle: every wiki edit ends with a commit** in `.llm-wiki/`, which is its own git repo with its own remote:

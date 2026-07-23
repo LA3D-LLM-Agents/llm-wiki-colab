@@ -60,6 +60,12 @@ git repository with its own remote, NOT tracked by the main repo. Read
 .llm-wiki/SCHEMA_${REPO_NAME}.md before non-trivial wiki edits. Update the wiki
 proactively when experiment results, decisions, or syntheses emerge.
 
+The wiki's current index (page catalog) and its last 5 log entries are included
+in this session's context below. You already hold the wiki's current state:
+treat the index as read, do not re-open index_${REPO_NAME}.md just to see what
+pages exist or what changed recently. Open individual .llm-wiki/ page files only
+when you need a page's actual contents.
+
 Every wiki edit ends with a commit in the wiki's own repo:
   git -C .llm-wiki add <files>
   git -C .llm-wiki commit -m "..."
