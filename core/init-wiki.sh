@@ -586,213 +586,21 @@ Update this schema as the project's needs change. It's a living document.
 SCHEMAEOF
 
 else
-    # Update mode — add missing sections to existing SCHEMA.
-    # Each append_section_if_missing call below mirrors a section of the
-    # create-mode heredoc above; keep the two copies byte-identical (see
-    # the MAINTENANCE NOTE at the "SCHEMA: create or update" marker).
-    # Find the schema file (namespaced or bare)
-    if [[ -f "$WIKI_DIR/${SCHEMA_NS}.md" ]]; then
-        SCHEMA_FILE="$WIKI_DIR/${SCHEMA_NS}.md"
-    else
-        SCHEMA_FILE="$WIKI_DIR/SCHEMA.md"
-    fi
-
-    UPDATED_SECTIONS=()
-
-    # Add Frontmatter section if missing
-    if append_section_if_missing "$SCHEMA_FILE" "## Frontmatter" "## Frontmatter
-
-Every page gets standard YAML frontmatter:
-
-\`\`\`markdown
----
-type: concept | entity | source-summary | synthesis | analysis | decision | index | comparison | untyped
-up: \"[[Parent-Page]]\"
-tags: [topic-a, topic-b]
----
-\`\`\`
-
-**Required fields**:
-- \`type:\` — what kind of page this is (use \`untyped\` if unsure)
-- \`up:\` — parent page in the hierarchy (usually a category page or index)
-
-**Optional typed edges** (add when the relationship is clear):
-- \`source:\` — literature or raw source this page summarizes
-- \`extends:\` — concept or page this builds upon
-- \`supports:\` / \`criticizes:\` — claim or page this provides evidence for or against
-- \`related:\` — lateral connection (prefer specific edges above when possible)
-
-**Rules**:
-- Every page gets frontmatter — no exceptions
-- Use \`type: untyped\` rather than skipping frontmatter entirely
-- Cross-references in frontmatter use \`[[Page-Name]]\` wikilink format for Obsidian compatibility
-- Cross-references in body text use \`[Display](Page-Name)\` format for GitHub wiki compatibility
-- The frontmatter feeds the knowledge graph pipeline for SPARQL queries"; then
-        UPDATED_SECTIONS+=("Frontmatter")
-    fi
-
-    # Add Page types section if missing (analysis + decision page types)
-    if append_section_if_missing "$SCHEMA_FILE" "## Page types" '## Page types
-
-Most page types (`concept`, `entity`, `synthesis`, etc.) have no required structure beyond the page format. Two query-driven types do, because they exist to capture content that would otherwise be dropped on the floor mid-session.
-
-### `analysis`
-
-A query-driven assessment or evaluation. Use when the user asks a synthesis question (`why X`, `compare A and B`, `should we ...`) and the answer is fileable.
-
-**Required sections**:
-1. **Question** — the synthesis question being answered, verbatim or close to it
-2. **Context** — what background drove the question
-3. **Analysis** — the body of the assessment
-4. **Conclusion** — the bottom line
-5. **Open follow-ups** — what is unresolved
-
-**Required frontmatter**: `derived_from:` listing the source pages synthesised (one or more wikilinks). Without it, the analysis is unprovenanced.
-
-### `decision`
-
-A design choice with rationale. Use when the project picks one option over alternatives and the reasoning should outlast the decision.
-
-**Required sections**:
-1. **Question** — the choice being made
-2. **Options considered** — each option with pros / cons
-3. **Decision** — what was chosen
-4. **Rejected alternatives** — what was not chosen, and why
-5. **Revisit triggers** — conditions under which the choice should be re-opened
-
-**Required frontmatter**: `decided_at: YYYY-MM-DD`. **Optional**: `superseded_by: [[Page]]` once a later decision replaces this one.'; then
-        UPDATED_SECTIONS+=("Page types")
-    fi
-
-    # Add frontmatter lint rules if missing
-    if append_section_if_missing "$SCHEMA_FILE" "Pages missing frontmatter" '### Lint: Frontmatter checks
-
-Also check during lint:
-- **Pages missing frontmatter** — add it based on page content (infer type, parent, tags)
-- **Pages with `type: untyped`** — review and assign a proper type if now obvious'; then
-        UPDATED_SECTIONS+=("Frontmatter lint rules")
-    fi
-
-    # Replace old "No YAML frontmatter" instruction if present
-    if grep -qF "No YAML frontmatter" "$SCHEMA_FILE"; then
-        lw_sed_inplace 's/No YAML frontmatter\. No tags\. Simple markdown that renders on GitHub wikis\./See the Frontmatter section below for frontmatter conventions./' "$SCHEMA_FILE"
-        UPDATED_SECTIONS+=("Replaced 'No YAML frontmatter' directive")
-    fi
-
-    # Replace old HTML-comment frontmatter instruction if present
-    if grep -qF "HTML comment" "$SCHEMA_FILE"; then
-        lw_sed_inplace 's/wrapped in an HTML comment so it renders cleanly on GitHub wikis/standard YAML frontmatter/' "$SCHEMA_FILE"
-        UPDATED_SECTIONS+=("Switched from HTML-comment to standard frontmatter")
-    fi
-
-    # Add Edges as Interface Operations section if missing
-    if append_section_if_missing "$SCHEMA_FILE" "## Edges as Interface Operations" '## Edges as Interface Operations
-
-A typed edge is not a label that says "these two things are related." It is an **interface contract** that defines an *operation* the agent should perform when it traverses the edge. Each edge type has an expected behavior, an expected target type, and a semantic commitment that shapes how downstream retrieval and reasoning should handle it.
-
-| Edge | Inverse | What it licenses the agent to do |
-|---|---|---|
-| `extends:` | `extendedBy` | Inherit semantic context from the parent. Treat the parent'"'"'s claims as background assumptions for the current page. |
-| `supports:` | `supportedBy` | Evidence aggregation. When traversing this edge, expect to combine claims; consistency across supporting pages is desirable. |
-| `criticizes:` | `criticizedBy` | Contradiction detection. Expect an unresolved tension that should trigger conflict-resolution logic before combining evidence. |
-| `source:` | (none — external) | Grounding check. The target is an external source; verify that any cited claim traces back to the source. |
-| `up:` | (none — implicit) | Parent / breadcrumb. Navigate upward in the hierarchy for category context. |
-| `related:` | (none — symmetric) | Fallback — no specific operation contract. Prefer a more specific edge type where one applies. |
-
-**Inverses are materialised by the KG, not authored.** Inverse predicates exist so that SPARQL queries can traverse a typed edge in either direction. The KG build pipeline (`scripts/kg/`) emits the inverse triple automatically from each forward assertion. **Agents do not write `extendedBy:`, `supportedBy:`, etc. in source documents.** When a back-reference would help a reader navigate, add it at the body level (typically in the target page'"'"'s See also section), not as a frontmatter inverse. See [Edge-Types](Edge-Types) for the full 16-predicate vocabulary.
-
-Populate edge fields with the most specific type you can justify. Treat `related:` as a fallback. Over time, `related:` uses should become rarer as the edge vocabulary fits the work.'; then
-        UPDATED_SECTIONS+=("Edges as Interface Operations")
-    fi
-
-    # Add Inline body annotations (Variant 1) section if missing
-    if append_section_if_missing "$SCHEMA_FILE" "## Inline body annotations (Variant 1)" "## Inline body annotations (Variant 1)
-
-The same predicates from \`extends:\` / \`supports:\` / \`criticizes:\` etc. in frontmatter can be applied inline to body links. The form is a content link followed by a parenthesised italicised link to the [Edge-Types](Edge-Types) page anchor:
-
-\`\`\`markdown
-This claim extends the framing in [Theory X](Theory-X) ([*extends*](Edge-Types#extends)).
-\`\`\`
-
-Two links in the rendered output: the content link is the normal cross-reference (emits a \`mentions\` edge), and the parenthesised italicised predicate link is the carrier (adds the typed edge from the source page to the target). The predicate link is filtered out of \`mentions\` by the KG extractor so the Edge-Types page does not become a spurious hub.
-
-**Frontmatter versus inline.** Two granularities, both processed by the KG.
-
-- **Frontmatter** asserts a page-level relationship: the entire page \`extends:\` X.
-- **Inline (Variant 1)** asserts a per-mention relationship: this specific paragraph's reference to X carries the typed edge.
-
-Use frontmatter when the whole page relates to the target that way. Use inline when only one particular reference in one paragraph carries the relationship, or when the same target appears multiple times with different rhetorical positions.
-
-**Agent judgment, not heuristic.** Annotations are added by reading the prose: in this specific context, is there a clear typed-edge predicate that captures the relationship between the source page and the target page? Apply the most specific predicate that fits. Default to no annotation when uncertain. Sparse-accurate beats dense-speculative; a spurious typed-edge claim distorts downstream queries.
-
-**When to annotate**: the predicate is clearly the most-specific fit, the relationship is a per-mention claim, the target is a real wiki page (not an external URL, not a fragment-only reference), and the annotation would be informative to a future reader and queryable by the KG.
-
-**When not to annotate**: multiple predicates plausibly fit and none clearly wins; the relationship is too vague to commit to (default \`mentions\` is fine); the link target is a fragment (\`Page-Name#section\`). Do not pair a fragment-targeted link with an inline annotation; the annotation asserts a page-level relationship and the fragment implies a sub-page target, so the two are incoherent together.
-
-**Where the vocabulary lives.** [Edge-Types](Edge-Types) lists the 16 forward predicates with one-line definitions; each section is the anchor target for the parenthesised carrier (e.g. \`[*partOf*](Edge-Types#partOf)\` resolves to the \`## partOf\` heading on that page)."; then
-        UPDATED_SECTIONS+=("Inline body annotations (Variant 1)")
-    fi
-
-    # Add Topology vs Content section if missing
-    if append_section_if_missing "$SCHEMA_FILE" "## Topology vs Content" '## Topology vs Content (when to use the KG)
-
-Two distinct retrieval shapes, each suited to a different question:
-
-- **Topology questions** — *what connects to what*. Multi-hop relationships, concept chains, parent/child rollups, hub detection ("which pages cite this finding?"). Use the KG via SPARQL queries against `scripts/kg/build/graph-full.ttl` (in-process via rdflib by default; load into Fuseki when a live endpoint is needed).
-- **Content questions** — *what does this page actually say*. Definitions, prose claims, specific numbers, source quotations. Use a direct file read or grep.
-
-The right pattern: use the KG to discover *where* to look (which pages connect to the topic), then file tools to read *what* the chosen pages say. Reserve grep for non-wiki code or for content searches that span many files.'; then
-        UPDATED_SECTIONS+=("Topology vs Content")
-    fi
-
-    # Add Log Entry Attribution section if missing
-    if append_section_if_missing "$SCHEMA_FILE" "## Log Entry Attribution" "## Log Entry Attribution
-
-The wiki is a shared memory across a team. Every log entry records who performed the operation, so provenance is answerable on the page itself and not only through \`git blame\`.
-
-**The \`by:\` field.** The first bullet of every \`${LOG_NS}.md\` entry is an attribution line:
-
-\`\`\`
-- by: <human> via <agent>
-\`\`\`
-
-- \`<human>\` is the value of \`git config user.name\` in the wiki repo at the time of the operation. Read it; do not invent it. If it does not match the identity that commits the entry, that is a bug to fix, not a value to guess.
-- \`<agent>\` is the coding assistant the operation ran under, for example \`claude-code\` or \`cursor\`.
-
-**One commit per log entry.** Never bundle multiple log operations into a single commit. Each append to \`${LOG_NS}.md\` is committed on its own: commit the page and index changes first, then the log entry as its own commit. This keeps \`git blame\` on the log file a faithful per-entry record, one entry mapping to one commit and one author.
-
-**Two records, one source of truth.** The \`by:\` field is the human-readable copy; git history is the verifiable record. They should always agree. If they disagree, trust git and correct the field."; then
-        UPDATED_SECTIONS+=("Log Entry Attribution")
-    fi
-
-    # Add Home Special-Files entry if missing. The create-mode heredoc
-    # inserts this between the Log and Home.md sub-entries of "## Special
-    # Files"; for existing wikis the helper appends at the end of the
-    # file (append_section_if_missing is order-agnostic by design). The
-    # entry is still discovered by the agent because SCHEMA is read
-    # end-to-end. Marker: the literal ### Home_<repo>.md heading line.
-    if append_section_if_missing "$SCHEMA_FILE" "### ${HOME_NS}.md" "### ${HOME_NS}.md
-- Human-facing entry point. Project description + a \`## Categories\` section mirroring the top-level categories in \`${INDEX_NS}.md\`, with 1-3 representative links per category. **Not** a comprehensive catalog; that is the Index's job.
-- **Update when a new top-level category emerges in the Index, or when a page lands that is significant enough to be one of its category's representative links.** Routine page additions inside an existing category: Index-only, no Home update needed.
-- Distinct from \`Home.md\` (the GitHub-wiki redirect), which is never edited."; then
-        UPDATED_SECTIONS+=("Home Special-Files entry")
-    fi
-
-    if [[ ${#UPDATED_SECTIONS[@]} -gt 0 ]]; then
-        echo "Updated SCHEMA:"
-        for s in "${UPDATED_SECTIONS[@]}"; do
-            echo "  + $s"
-        done
-    else
-        echo "SCHEMA already up to date."
-    fi
+    # Plugin model: attach does not rewrite an existing wiki's SCHEMA. Convention
+    # drift is a /wiki-lint concern, not a silent attach side-effect. Update mode
+    # makes no changes and creates no commits (an un-pushed local commit is what
+    # diverged clones from the pushed wiki).
+    echo "Existing wiki detected — leaving SCHEMA and pages as-is (run /wiki-lint to check conventions)."
 fi
 
 # --- Stamp wiki/*.md.template files into the wiki ---
 # Implementation lives in stamp_wiki_templates (defined near the top, shared
 # with the --stamp-missing-templates early-exit mode). Full stamp here:
-# create-or-overwrite, idempotent on update mode.
-stamp_wiki_templates
+# create-or-overwrite. Only on create: attach must not stamp pages into an
+# existing wiki, that would be an un-pushed local commit (divergence).
+if [[ "$MODE" == "create" ]]; then
+    stamp_wiki_templates
+fi
 
 # --- WIKI-INDEX registration and CLAUDE.md writing removed for the plugin model ---
 # WIKI-INDEX assumed a wiki/ parent and would write WIKI-INDEX.md into the
@@ -820,30 +628,10 @@ else
     fi
 fi
 
-# --- Log entry (update mode only) ---
-if [[ "$MODE" == "update" ]]; then
-    # Find the log file (namespaced or bare)
-    if [[ -f "$WIKI_DIR/${LOG_NS}.md" ]]; then
-        LOG_FILE="$WIKI_DIR/${LOG_NS}.md"
-    elif [[ -f "$WIKI_DIR/log.md" ]]; then
-        LOG_FILE="$WIKI_DIR/log.md"
-    else
-        LOG_FILE=""
-    fi
-
-    if [[ -n "$LOG_FILE" ]] && ! grep -qF "frontmatter convention" "$LOG_FILE"; then
-        cat >> "$LOG_FILE" << EOF
-
-## [$(date +%Y-%m-%d)] update | Added frontmatter convention
-- Schema updated with standard YAML frontmatter format
-- Lint rules now check for missing frontmatter
-- Knowledge graph pipeline support added
-EOF
-        cd "$WIKI_DIR"
-        git add "$(basename "$LOG_FILE")"
-        git commit -m "Log: frontmatter convention update" --quiet 2>/dev/null || true
-    fi
-fi
+# --- Log entry on attach removed for the plugin model ---
+# The template appended a gratuitous "frontmatter convention" log entry (and a
+# commit) on every update-mode run; that un-pushed local commit is what diverged
+# clones from the pushed wiki. Attach now writes no log entry.
 
 # --- Summary ---
 echo ""
