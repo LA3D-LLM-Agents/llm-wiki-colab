@@ -73,6 +73,6 @@ Deferred past v1: a **Cursor adapter** (`.cursor/rules` already exist upstream) 
 
 If you use this plugin, please cite the paper it implements:
 
-> Saboia Moreira, P., Vardeman II, C., & Sweet, C. (2026). *Beyond Memory: A Templated Substrate for Heterogeneous Collaborative Knowledge Work with LLM Agents*. Zenodo. https://doi.org/10.5281/zenodo.21213175
+> Saboia Moreira, P., Vardeman II, C., Sweet, J., & Sweet, C. (2026). *Beyond Memory: A Templated Substrate for Heterogeneous Collaborative Knowledge Work with LLM Agents*. Zenodo. https://doi.org/10.5281/zenodo.21213175
 
 A machine-readable [`CITATION.cff`](CITATION.cff) is in the repo, so GitHub shows a "Cite this repository" button. The project **license is still being finalized**.
