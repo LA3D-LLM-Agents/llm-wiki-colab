@@ -16,6 +16,8 @@ for f in \
     core/scripts/wiki-write-protocol/protocol.sh \
     core/scripts/wiki-doctor.sh \
     core/scripts/wiki-reciprocity.py \
+    core/scripts/agent-comms/ask.sh \
+    core/scripts/agent-comms/enroll.sh \
     core/scripts/kg/build-graph.sh \
     core/templates/guidance.md \
     hooks/ensure-wiki.py \
@@ -24,7 +26,9 @@ for f in \
     hooks/hooks.json \
     .claude-plugin/plugin.json \
     commands/wiki-init.md \
-    commands/wiki-doctor.md; do
+    commands/wiki-doctor.md \
+    commands/wiki-ask.md \
+    commands/wiki-enroll.md; do
     assert_file "$A/$f" "plugin ships $f"
 done
 

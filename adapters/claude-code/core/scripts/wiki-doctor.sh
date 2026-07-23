@@ -89,6 +89,12 @@ else
     bad "hooks/session-start.sh missing"
 fi
 
+# 8. Federation ask deps (optional; only /wiki-ask and /wiki-enroll need them).
+miss=""
+for c in jq curl; do command -v "$c" >/dev/null 2>&1 || miss="$miss $c"; done
+command -v gh >/dev/null 2>&1 || miss="$miss gh(for /wiki-enroll)"
+[ -z "$miss" ] && ok "federation ask deps present (jq, curl, gh)" || warn "ask deps missing:$miss — /wiki-ask and /wiki-enroll need them"
+
 echo ""
 echo "structural failures: $FAIL"
 exit "$FAIL"
