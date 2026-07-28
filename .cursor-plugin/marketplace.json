@@ -1,0 +1,14 @@
+{
+  "name": "llm-wiki-colab",
+  "owner": { "name": "LA3D-LLM-Agents", "url": "https://github.com/LA3D-LLM-Agents" },
+  "metadata": {
+    "description": "LLM-wiki durable-memory plugins (Claude Code and Cursor adapters)."
+  },
+  "plugins": [
+    {
+      "name": "llm-wiki",
+      "source": "./adapters/cursor",
+      "description": "Opt-in per-repo llm-wiki memory for Cursor: sessionStart orientation (index + last-5 log), verification-gate advisory, wiki-write-protocol push, and a knowledge-graph build."
+    }
+  ]
+}

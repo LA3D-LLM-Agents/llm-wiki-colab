@@ -1,0 +1,45 @@
+---
+description: The project's wiki is durable memory. Read it to recall context; write to it to remember; commit every wiki edit in the wiki's own git repo.
+alwaysApply: false
+---
+
+# Wiki as project memory
+
+This project maintains a persistent wiki at `.llm-wiki/` (a separate git repository with its own remote, created by `/wiki-init`). The wiki is the project's durable memory across sessions and collaborators. Treat it as such only when `.llm-wiki/` is present; otherwise this rule does not apply.
+
+## Read to recall
+
+When context about this project would help an answer, read the wiki first.
+
+1. Open `.llm-wiki/index_<repo>.md` to locate relevant pages (or use the index already injected at session start).
+2. Read those pages, then synthesize the answer with citations to page names.
+3. If a wiki claim conflicts with current code or results, trust what is observed now and flag the stale page rather than repeating it.
+
+## Write to remember (proactively, without being asked)
+
+When significant work produces something a future session would benefit from knowing, write it to the wiki. Triggers:
+
+- New external source (paper, design doc, article) enters the project -> use the `wiki-source` skill.
+- An experiment finishes a run -> use the `wiki-experiment` skill.
+- An architecture / parameter / methodology decision is made -> record it with the reason.
+- A reusable synthesis emerges from a question -> file it.
+- A finding contradicts or supersedes a wiki claim -> update the affected pages.
+
+Defer to `.llm-wiki/SCHEMA_<repo>.md` for page format, frontmatter (required `type:` and `up:`, optional typed edges), and the full Ingest procedure. Do not duplicate SCHEMA's rules into project files.
+
+## Finish the cycle: every wiki edit ends with a commit
+
+The wiki at `.llm-wiki/` is a separate git repository. After updating pages, run:
+
+```bash
+git -C .llm-wiki add <files-by-name>
+git -C .llm-wiki commit -m "<descriptive message>"
+```
+
+Execute these without asking. Local commits in the wiki repo are trivially reversible. Push only when explicitly asked, and when pushing follow the procedure in `core/agents/wiki-write-protocol.md` in the llm-wiki plugin rather than plain `git push`.
+
+Before committing, run the Verification Gate (`core/agents/verification-gate.md` in the llm-wiki plugin) over every page created or edited this session.
+
+## Cursor-specific note
+
+The plugin's `sessionStart` hooks inject the wiki index and recent log when `.llm-wiki/` exists. The `postToolUse` hook is the only path that points at the discipline and verification gates after a wiki-page write. The three operation-specific skills (`wiki-experiment`, `wiki-source`, `wiki-lint`) live under the plugin's `skills/`; the agent reads them when intent matches their descriptions, or when the user asks for them by name.

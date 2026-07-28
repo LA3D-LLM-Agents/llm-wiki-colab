@@ -31,8 +31,16 @@ jobs:
       - name: Packaging drift guard
         run: |
           bash adapters/claude-code/package.sh
+          bash adapters/cursor/package.sh
+          dirty=0
           if ! git diff --quiet -- adapters/claude-code/core; then
             echo "adapters/claude-code/core is out of sync with root core/ — run adapters/claude-code/package.sh and commit."
             git --no-pager diff --stat -- adapters/claude-code/core
-            exit 1
+            dirty=1
           fi
+          if ! git diff --quiet -- adapters/cursor/core; then
+            echo "adapters/cursor/core is out of sync with root core/ — run adapters/cursor/package.sh and commit."
+            git --no-pager diff --stat -- adapters/cursor/core
+            dirty=1
+          fi
+          exit "$dirty"

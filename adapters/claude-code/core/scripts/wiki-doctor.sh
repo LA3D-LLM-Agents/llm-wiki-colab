@@ -2,13 +2,24 @@
 # /wiki-doctor: connectivity self-check for the llm-wiki plugin.
 #
 # Run from the project root (where .llm-wiki/ lives), with CLAUDE_PLUGIN_ROOT
-# set (Claude Code sets it; the command wrapper passes it through). Prints a
-# green/red checklist. Exit code = number of failed STRUCTURAL checks. Missing
-# KG deps or no network are reported as warnings, not failures, so a clean
-# install on an offline machine still exits 0.
+# or CURSOR_PLUGIN_ROOT set (the host harness sets it; the command wrapper
+# passes it through). Prints a green/red checklist. Exit code = number of
+# failed STRUCTURAL checks. Missing KG deps or no network are reported as
+# warnings, not failures, so a clean install on an offline machine still
+# exits 0.
 set -uo pipefail
 
-PR="${CLAUDE_PLUGIN_ROOT:-}"
+if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+    PR="$CURSOR_PLUGIN_ROOT"
+    HARNESS=cursor
+elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+    PR="$CLAUDE_PLUGIN_ROOT"
+    HARNESS=claude-code
+else
+    PR=""
+    HARNESS=unknown
+fi
+
 FAIL=0
 ok()   { echo "  ok    $1"; }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL + 1)); }
@@ -16,11 +27,11 @@ warn() { echo "  warn  $1"; }
 
 echo "llm-wiki doctor"
 
-# 1. Plugin root resolves and carries the manifest.
-if [ -n "$PR" ] && [ -f "$PR/.claude-plugin/plugin.json" ]; then
+# 1. Plugin root resolves and carries the harness manifest.
+if [ -n "$PR" ] && { [ -f "$PR/.cursor-plugin/plugin.json" ] || [ -f "$PR/.claude-plugin/plugin.json" ]; }; then
     ok "plugin root resolves ($PR)"
 else
-    bad "CLAUDE_PLUGIN_ROOT unset or missing .claude-plugin/plugin.json (value: '${PR:-unset}')"
+    bad "CURSOR_PLUGIN_ROOT / CLAUDE_PLUGIN_ROOT unset or missing plugin.json (value: '${PR:-unset}')"
 fi
 
 # 2. Gate files shipped.
@@ -30,9 +41,11 @@ for g in verification-gate discipline-gates wiki-write-protocol; do
 done
 [ -z "$missing" ] && ok "gate files present (core/agents/)" || bad "missing gate file(s):$missing"
 
-# 3. Hooks declared.
-if [ -f "$PR/hooks/hooks.json" ] && grep -q SessionStart "$PR/hooks/hooks.json" && grep -q PostToolUse "$PR/hooks/hooks.json"; then
-    ok "hooks.json declares SessionStart + PostToolUse"
+# 3. Hooks declared (Claude: SessionStart/PostToolUse; Cursor: sessionStart/postToolUse).
+if [ -f "$PR/hooks/hooks.json" ] \
+    && grep -Eqi 'sessionStart|SessionStart' "$PR/hooks/hooks.json" \
+    && grep -Eqi 'postToolUse|PostToolUse' "$PR/hooks/hooks.json"; then
+    ok "hooks.json declares sessionStart + postToolUse"
 else
     bad "hooks.json missing or does not declare both hooks"
 fi
@@ -75,9 +88,10 @@ if [ -d .llm-wiki ]; then
     fi
 fi
 
-# 7. Orientation dry-run: what SessionStart would inject.
+# 7. Orientation dry-run: what sessionStart would inject.
 if [ -f "$PR/hooks/session-start.sh" ]; then
-    orient="$(bash "$PR/hooks/session-start.sh" 2>/dev/null || true)"
+    # Cursor session-start drains stdin; feed empty JSON so it does not block.
+    orient="$(printf '{}' | env CURSOR_PLUGIN_ROOT="${CURSOR_PLUGIN_ROOT:-}" CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}" bash "$PR/hooks/session-start.sh" 2>/dev/null || true)"
     if printf '%s' "$orient" | grep -q "durable memory"; then
         ok "orientation dry-run emits the session-start reminder"
         tail="$(printf '%s\n' "$orient" | awk '/last 5 log entries/{f=1} f' | grep '^## \[' | tail -1)"

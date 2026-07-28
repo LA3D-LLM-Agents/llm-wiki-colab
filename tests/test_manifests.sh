@@ -8,7 +8,10 @@ source "$HERE/lib/assert.sh"
 
 for j in .claude-plugin/marketplace.json \
          adapters/claude-code/.claude-plugin/plugin.json \
-         adapters/claude-code/hooks/hooks.json; do
+         adapters/claude-code/hooks/hooks.json \
+         .cursor-plugin/marketplace.json \
+         adapters/cursor/.cursor-plugin/plugin.json \
+         adapters/cursor/hooks/hooks.json; do
     if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$ROOT/$j" 2>/dev/null; then
         _pass "valid json: $j"
     else

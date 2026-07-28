@@ -25,10 +25,17 @@
 INPUT=$(cat)
 
 # Extract the path of the file just written or edited. Empty if absent or
-# if jq is unavailable; either way the script simply does not nudge.
+# if neither jq nor python3 can parse stdin; either way the script simply
+# does not nudge.
 FILE_PATH=""
 if command -v jq >/dev/null 2>&1; then
     FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+elif command -v python3 >/dev/null 2>&1; then
+    FILE_PATH=$(printf '%s' "$INPUT" | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("tool_input", {}).get("file_path", "") or "")
+except Exception:
+    print("")' 2>/dev/null || true)
 fi
 
 # Nudge only for a write/edit to a wiki page under the opt-in .llm-wiki/ dir.

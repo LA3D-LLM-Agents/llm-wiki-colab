@@ -1,8 +1,11 @@
 {
   "name": "llm-wiki-colab",
-  "owner": { "name": "LA3D-LLM-Agents", "url": "https://github.com/LA3D-LLM-Agents" },
+  "owner": {
+    "name": "LA3D-LLM-Agents",
+    "url": "https://github.com/LA3D-LLM-Agents"
+  },
   "metadata": {
-    "description": "LLM-wiki durable-memory plugins (Claude Code adapter; Cursor to follow)."
+    "description": "LLM-wiki durable-memory plugins (Claude Code and Cursor adapters)."
   },
   "plugins": [
     {

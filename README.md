@@ -8,7 +8,7 @@ durable-memory pattern as installable tooling, ported from
 
 The llm-wiki pattern this plugin packages is described in [Beyond Memory](https://doi.org/10.5281/zenodo.21213175) (Saboia Moreira et al., 2026, Zenodo). Project-facing overviews: the [Wiki-Grounded Research Agent](https://la3d.github.io/WGRA) flyer, the [WGRA Nuggets](https://la3d.github.io/WGRA/blog/) blog, and the [LA3D-LLM-Agents ecosystem](https://la3d-llm-agents.github.io/).
 
-**Status: v1 shipped (Claude Code adapter), remotely installable and test-backed.** See `BUILD-NOTES.md` for what is done and what remains. Design rationale and decisions live in the llm-wiki-vision wiki page *Plugin-Packaging-Architecture*.
+**Status: Claude Code and Cursor adapters shipped**, remotely installable and test-backed. See `BUILD-NOTES.md` for what is done and what remains. Design rationale and decisions live in the llm-wiki-vision wiki page *Plugin-Packaging-Architecture*.
 
 ## Layout
 
@@ -16,12 +16,16 @@ The llm-wiki pattern this plugin packages is described in [Beyond Memory](https:
   `init-wiki.sh`, `lib/`, templates. Copied into each adapter at package time.
 - `adapters/claude-code/` — the Claude Code plugin (`commands/`, `skills/`,
   `hooks/`, `plugin.json`). This directory is the installed plugin.
-- `.claude-plugin/marketplace.json` — self-exposing marketplace
+- `adapters/cursor/` — the Cursor plugin (`commands/`, `skills/`, `rules/`,
+  `hooks/`, `plugin.json`).
+- `.claude-plugin/marketplace.json` — Claude Code marketplace
   (`source -> adapters/claude-code`).
+- `.cursor-plugin/marketplace.json` — Cursor marketplace
+  (`source -> adapters/cursor`).
 
 ## Model
 
-- The plugin installs **per machine** (user scope); its SessionStart hook is
+- The plugin installs **per machine** (user scope); its session-start hook is
   silent unless a repo has opted in.
 - **Opt-in** = the presence of a gitignored `.llm-wiki/` folder, created by
   `/wiki-init`. The memory is the repo's GitHub wiki cloned there; the project
@@ -36,7 +40,7 @@ The llm-wiki pattern this plugin packages is described in [Beyond Memory](https:
 
 Run `/wiki-doctor` to see what is present.
 
-## Install
+## Install (Claude Code)
 
 ```
 /plugin marketplace add LA3D-LLM-Agents/llm-wiki-colab
@@ -44,13 +48,23 @@ Run `/wiki-doctor` to see what is present.
 /wiki-init
 ```
 
+## Install (Cursor)
+
+Install the Cursor plugin from this repo via one of:
+
+1. **Team marketplace** (Teams/Enterprise): Dashboard → Plugins → Import this GitHub repo, then enable `llm-wiki`.
+2. **Local plugin**: symlink or copy `adapters/cursor` into `~/.cursor/plugins/local/llm-wiki`, then reload Cursor.
+3. **Public marketplace** (optional): submit via [cursor.com/marketplace/publish](https://cursor.com/marketplace/publish) when ready.
+
+Then in a project: run `/wiki-init` (or ask the agent to initialize the wiki).
+
 ## Getting started
 
 In a repo you want to give durable memory:
 
 1. The wiki lives in the repo's **GitHub wiki**. If the repo has none yet, enable it (Settings -> Features -> Wikis) and create the first page, or run `/wiki-init` and follow its prompt.
 2. `/wiki-init` clones/attaches the wiki into a gitignored `.llm-wiki/`.
-3. Open a **new** session in that repo; the SessionStart hook injects the wiki index and recent log so the agent treats it as memory. The plugin stays silent in any repo without a `.llm-wiki/`.
+3. Open a **new** session in that repo; the session-start hook injects the wiki index and recent log so the agent treats it as memory. The plugin stays silent in any repo without a `.llm-wiki/`.
 
 ## Commands
 
@@ -58,16 +72,20 @@ In a repo you want to give durable memory:
 `/wiki-ask` (consult a federated agent's wiki), `/wiki-enroll` (publish this repo
 to the federation), `/wiki-experiment`, `/wiki-source`, `/wiki-lint`.
 
-## Uninstall
+## Uninstall (Claude Code)
 
 ```
 /plugin uninstall llm-wiki@llm-wiki-colab
 /plugin marketplace remove llm-wiki-colab
 ```
 
+## Uninstall (Cursor)
+
+Disable or remove the plugin from **Customize → Plugins**, or delete the local install under `~/.cursor/plugins/`.
+
 ## Roadmap
 
-Deferred past v1: a **Cursor adapter** (`.cursor/rules` already exist upstream) and a **neutral MCP server** exposing the wiki operations to any MCP host. See `BUILD-NOTES.md`.
+Deferred: a **neutral MCP server** exposing the wiki operations to any MCP host. See `BUILD-NOTES.md`.
 
 ## How to cite
 

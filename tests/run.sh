@@ -6,8 +6,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
-# Assemble core into the adapter so ${CLAUDE_PLUGIN_ROOT}/core/... resolves.
+# Assemble core into both adapters so ${CLAUDE_PLUGIN_ROOT} / ${CURSOR_PLUGIN_ROOT} resolve.
 bash "$ROOT/adapters/claude-code/package.sh" >/dev/null
+bash "$ROOT/adapters/cursor/package.sh" >/dev/null
 
 FAIL=0
 for t in "$HERE"/test_*.sh; do
