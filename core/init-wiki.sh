@@ -342,6 +342,8 @@ up: "[[${HOME_NS}]]"
 
 This wiki is a persistent, compounding knowledge base. The LLM writes and maintains all pages. The human curates sources, directs analysis, and asks questions. Knowledge is compiled once and kept current, not re-derived every session.
 
+**Write discipline.** Treat the wiki as durable, queryable memory, not a summary. Your work succeeds only if a future agent, reading only these pages, can recover a source's specific claims -- the exact quantities (with their units), the named systems and methods, and the conditions -- and see how they connect to other pages. Preserve those particulars as first-class, retrievable structure (their own pages or clearly-marked sections, cross-linked), not merely as passing mentions folded under general concepts. A page that keeps the general ideas but loses the specifics has failed, however tidy it looks.
+
 ## Source of Truth
 
 **Raw sources** (immutable — read but never modify):
