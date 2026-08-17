@@ -16,6 +16,8 @@ This is the `llm-wiki.md`-style Ingest. It is **not** for filing our own experim
 
 ## What to capture
 
+Treat the wiki as durable, queryable memory, not a summary. The ingest succeeds only if a future agent, reading only these pages, can recover this source's specific claims — the exact quantities (with their units), the named systems and methods, and the conditions — and see how they connect to other pages. Preserve those particulars as first-class, retrievable structure (their own pages or clearly-marked sections, cross-linked), not merely as passing mentions folded under general concepts. A page that keeps the general ideas but loses the specifics has failed, however tidy it looks.
+
 - Title, author(s), publication or source
 - The one-sentence claim or contribution
 - The specific arguments, methods, or findings that bear on this project
@@ -34,9 +36,9 @@ Follow the Ingest procedure in `.llm-wiki/SCHEMA_<repo>.md`. Pointers:
 6. Fix cross-references in both directions on every affected page (`[[Page]]` in frontmatter, `[Display](Page)` in body).
 7. Update `index_<repo>.md` under the "Source summaries" category.
 8. Append a `## [YYYY-MM-DD] ingest | Source title` entry to `log_<repo>.md`. The first bullet is the attribution line `- by: <name> via cursor`, where `<name>` is the output of `git config user.name` in the wiki repo (read it, do not invent it). Then 2 to 5 bullets describing the ingest. See "Log Entry Attribution" in `SCHEMA_<repo>.md`.
-9. Optionally rebuild the knowledge graph: `${CURSOR_PLUGIN_ROOT}/core/scripts/kg/build-graph.sh`.
-10. **Run the Verification Gate** at `${CURSOR_PLUGIN_ROOT}/core/agents/verification-gate.md` over every page created or edited. Do not commit until all criteria pass. The gate catches projection-as-fact, missing corpus tags, missing back-references, and missing log/index entries.
-11. Commit in the wiki's own git repo in two steps: first stage and commit the page and index changes by name with a descriptive message, then stage and commit the `log_<repo>.md` entry on its own. One commit per log entry keeps `git blame` on the log a faithful per-entry record (see "Log Entry Attribution" in SCHEMA). Do not push unless the user requests. **When pushing, follow the procedure at `${CURSOR_PLUGIN_ROOT}/core/agents/wiki-write-protocol.md`** rather than plain `git push`.
+9. Optionally rebuild the knowledge graph: `${CLAUDE_PLUGIN_ROOT}/core/scripts/kg/build-graph.sh`.
+10. **Run the Verification Gate** at `${CLAUDE_PLUGIN_ROOT}/core/agents/verification-gate.md` over every page created or edited. Do not commit until all criteria pass. The gate catches projection-as-fact, missing corpus tags, missing back-references, and missing log/index entries.
+11. Commit in the wiki's own git repo in two steps: first stage and commit the page and index changes by name with a descriptive message, then stage and commit the `log_<repo>.md` entry on its own. One commit per log entry keeps `git blame` on the log a faithful per-entry record (see "Log Entry Attribution" in SCHEMA). Do not push unless the user requests. **When pushing, follow the procedure at `${CLAUDE_PLUGIN_ROOT}/core/agents/wiki-write-protocol.md`** rather than plain `git push`.
 
 A typical source ingest touches 5 to 15 pages.
 
