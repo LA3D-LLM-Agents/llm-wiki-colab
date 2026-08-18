@@ -1,9 +1,5 @@
 .DS_Store
-core/scripts/kg/build/
-# The adapter ships a committed copy of core/ so the marketplace install is
-# self-contained (package.sh re-syncs it from the root canonical core/).
-# Only the KG build output inside it is ignored.
-adapters/claude-code/core/scripts/kg/build/
+plugins/llm-wiki/core/scripts/kg/build/
 .llm-wiki/
 .devenv*
 .direnv/
