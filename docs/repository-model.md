@@ -28,6 +28,18 @@ Everything that validates or installs the plugin operates on build output, never
 The source tree deliberately carries no `.claude-plugin/marketplace.json`, so a `src` checkout is not directly installable.
 The marketplace catalog exists only in build output.
 
+## Publishing
+
+One publish script turns a source commit into a branch commit.
+It assembles the artifact tree into a scratch directory, runs the behavior suite against that tree as a gate, and appends a single commit of pure build output to the target branch.
+Staging happens in a temporary index, so the working copy and the checked-out ref are never touched.
+
+Publishing to `main` requires an explicit flag; every other branch publishes without one.
+The script only moves a local ref.
+Pushing the branch is the caller's responsibility.
+
+Every publish commit records the source ref and the versions of the tools that produced it in its message, so a published tree can always be traced back to the commit and toolchain it came from.
+
 ## Multi-ecosystem target
 
 `main` will eventually carry per-platform subtrees: `claude/`, `codex/`, `cursor/`, and an `antigravity/` tree.
