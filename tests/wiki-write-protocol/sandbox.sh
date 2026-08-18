@@ -7,6 +7,21 @@
 #   - agent-<handle>/ : per-agent local clones
 #
 # Sandboxes are torn down by SANDBOX_CLEANUP unless KEEP_SANDBOX=1.
+#
+# It also resolves the protocol implementation under test. Scenarios source
+# "$PROTOCOL_SH" right after this file; the implementation is taken from the
+# built artifact tree, never from the source tree.
+
+if [ -z "${PLUGIN_ROOT:-}" ]; then
+    echo "PLUGIN_ROOT is unset; run the scenarios via tests/run.sh (it builds the artifact tree and exports it)" >&2
+    exit 1
+fi
+PROTOCOL_SH="$PLUGIN_ROOT/core/scripts/wiki-write-protocol/protocol.sh"
+if [ ! -f "$PROTOCOL_SH" ]; then
+    echo "protocol.sh missing from the built tree: $PROTOCOL_SH" >&2
+    exit 1
+fi
+export PROTOCOL_SH
 
 setup_sandbox() {
     SANDBOX="$(mktemp -d -t multi-agent-proto-XXXX)"

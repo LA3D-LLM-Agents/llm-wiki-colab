@@ -1,13 +1,44 @@
 #!/usr/bin/env bash
-# Plugin test runner. Assembles the adapter (copies core/ in), runs every
-# test_*.sh, then the wiki-write-protocol scenario suite. Exit code = number of
-# failing test files.
+# Plugin test runner. Builds the artifact tree, then runs every test_*.sh and
+# the wiki-write-protocol scenario suite against that build output (never
+# against the source tree). Exit code = number of failing test files.
+#
+# LLM_WIKI_BUILT_TREE can point at a tree to reuse. If that tree contains a
+# `.prebuilt` marker file the build step is skipped and the tree is used as-is
+# (used by the mutation gates, which mutate a copy of a built tree).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
-# Assemble core into the adapter so ${CLAUDE_PLUGIN_ROOT}/core/... resolves.
-bash "$ROOT/adapters/claude-code/package.sh" >/dev/null
+if [ -n "${LLM_WIKI_BUILT_TREE:-}" ]; then
+    OUT="$LLM_WIKI_BUILT_TREE"
+    mkdir -p "$OUT"
+    OUT="$(cd "$OUT" && pwd -P)"
+else
+    OUT="$(mktemp -d)"
+    OUT="$(cd "$OUT" && pwd -P)"
+    trap 'rm -rf "$OUT"' EXIT
+fi
+
+if [ -e "$OUT/.prebuilt" ]; then
+    echo "===== build (reusing prebuilt tree at $OUT) ====="
+else
+    echo "===== build ====="
+    if ! uv run "$ROOT/build/assemble.py" --out "$OUT"; then
+        echo "########## build FAILED; cannot test the artifact ##########"
+        exit 1
+    fi
+fi
+echo ""
+
+MARKETPLACE_TREE="$OUT"
+PLUGIN_ROOT="$OUT/claude/plugins/llm-wiki"
+export MARKETPLACE_TREE PLUGIN_ROOT
+
+if [ ! -d "$PLUGIN_ROOT" ]; then
+    echo "########## build output has no $PLUGIN_ROOT ##########"
+    exit 1
+fi
 
 FAIL=0
 for t in "$HERE"/test_*.sh; do

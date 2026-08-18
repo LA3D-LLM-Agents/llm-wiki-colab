@@ -2,15 +2,14 @@
 # /wiki-doctor structural checks against a healthy (attached) install.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
 source "$HERE/lib/assert.sh"
-ADAPTER="$ROOT/adapters/claude-code"
+require_env PLUGIN_ROOT
 
 # Attach a wiki (local create mode) so the structural checks have something real.
 d="$(mk_scratch https://github.com/foo/bar.git)"
-( cd "$d" && bash "$ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
+( cd "$d" && bash "$PLUGIN_ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
 
-out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$ADAPTER" bash "$ADAPTER/core/scripts/wiki-doctor.sh" 2>&1)"
+out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$PLUGIN_ROOT/core/scripts/wiki-doctor.sh" 2>&1)"
 
 assert_contains "$out" "plugin root resolves"          "check 1: plugin root"
 assert_contains "$out" "gate files present"            "check 2: gates present"

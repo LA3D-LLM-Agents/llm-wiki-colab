@@ -6,7 +6,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PROTO_DIR="$(cd "$HERE/../.." && pwd)"
 source "$PROTO_DIR/sandbox.sh"
-source "$PROTO_DIR/protocol.sh"
+source "$PROTOCOL_SH"
 
 setup_sandbox
 trap cleanup_sandbox EXIT

@@ -16,6 +16,19 @@ assert_not_contains() { if printf '%s' "$1" | grep -qF -- "$2"; then _fail "${3:
 assert_empty()   { if [ -z "$1" ]; then _pass "${2:-empty output}"; else _fail "${2:-expected empty, got: ${1:0:60}}"; fi; }
 assert_grep_file(){ if grep -qF -- "$2" "$1" 2>/dev/null; then _pass "${3:-'$2' in $(basename "$1")}"; else _fail "${3:-'$2' not in $(basename "$1")}"; fi; }
 
+# require_env VAR... -> exits 1 with a clear message if any VAR is unset/empty.
+# Tests run against build output, so PLUGIN_ROOT / MARKETPLACE_TREE come from
+# run.sh, which assembles the artifact tree first.
+require_env() {
+    local v
+    for v in "$@"; do
+        if [ -z "${!v:-}" ]; then
+            echo "  FAIL $v is unset; run this test via tests/run.sh (it builds the artifact tree and exports it)" >&2
+            exit 1
+        fi
+    done
+}
+
 # mk_scratch [origin-url] -> echoes a fresh git repo dir with identity set.
 mk_scratch() {
     local d

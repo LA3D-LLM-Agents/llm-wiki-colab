@@ -5,17 +5,17 @@
 # diverged a clone from the pushed wiki).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
 source "$HERE/lib/assert.sh"
+require_env PLUGIN_ROOT
 
 d="$(mk_scratch https://github.com/foo/bar.git)"
 
 # First run: create mode (scaffolds the wiki, one "Initialize" commit).
-( cd "$d" && bash "$ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
+( cd "$d" && bash "$PLUGIN_ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
 head1="$(git -C "$d/.llm-wiki" rev-parse HEAD)"
 
 # Second run: the wiki now has a SCHEMA, so this is update-mode (attach).
-out="$(cd "$d" && bash "$ROOT/core/init-wiki.sh" --agent claude-code 2>&1)"
+out="$(cd "$d" && bash "$PLUGIN_ROOT/core/init-wiki.sh" --agent claude-code 2>&1)"
 head2="$(git -C "$d/.llm-wiki" rev-parse HEAD)"
 
 [ "$head1" = "$head2" ] && _pass "re-attach makes no new commit (HEAD unchanged)" || _fail "re-attach created a commit ($head1 -> $head2)"

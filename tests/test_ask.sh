@@ -4,9 +4,9 @@
 # local wiki repo (LLM_CLI=true, so no real claude call and no network).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
 source "$HERE/lib/assert.sh"
-ASK="$ROOT/core/scripts/agent-comms/ask.sh"
+require_env PLUGIN_ROOT
+ASK="$PLUGIN_ROOT/core/scripts/agent-comms/ask.sh"
 
 bash "$ASK" --help >/dev/null 2>&1 && _pass "--help exits 0" || _fail "--help nonzero"
 bash "$ASK" >/dev/null 2>&1; [ $? -eq 2 ] && _pass "no args -> usage error (2)" || _fail "no-args exit not 2"

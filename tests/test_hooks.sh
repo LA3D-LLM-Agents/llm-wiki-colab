@@ -2,9 +2,9 @@
 # L2: hook behavior via the JSON stdin/stdout protocol (no live LLM).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
 source "$HERE/lib/assert.sh"
-HOOKS="$ROOT/adapters/claude-code/hooks"
+require_env PLUGIN_ROOT
+HOOKS="$PLUGIN_ROOT/hooks"
 
 # 1. SessionStart is silent when the repo has not opted in (no .llm-wiki/).
 d="$(mk_scratch https://github.com/foo/bar.git)"
@@ -15,7 +15,7 @@ assert_empty "$out" "SessionStart silent without .llm-wiki (opt-in contract)"
 mkdir -p "$d/.llm-wiki"
 printf '# Index\n- page Alpha\n' > "$d/.llm-wiki/index_bar.md"
 { echo "# Log"; for n in 1 2 3 4 5 6 7; do echo "## [2026-07-0$n] e | E$n"; echo "- body"; done; } > "$d/.llm-wiki/log_bar.md"
-out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$ROOT/adapters/claude-code" bash "$HOOKS/session-start.sh")"
+out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$HOOKS/session-start.sh")"
 # Output must be a single valid JSON object (plain stdout would be ignored by CC).
 printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null \
     && _pass "SessionStart emits a single valid JSON object" \

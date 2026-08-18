@@ -4,10 +4,10 @@
 # verbatim from upstream; only this assertion glue is in the plugin's style.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
 source "$HERE/lib/assert.sh"
+require_env PLUGIN_ROOT
 
-SCRIPT="$ROOT/core/scripts/wiki-reciprocity.py"
+SCRIPT="$PLUGIN_ROOT/core/scripts/wiki-reciprocity.py"
 FIX="$HERE/fixtures/reciprocity-wiki"
 tmp="$(mktemp -d)"
 

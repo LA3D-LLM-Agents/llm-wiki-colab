@@ -4,6 +4,15 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# The protocol under test ships in the built plugin tree; scenarios resolve it
+# through sandbox.sh. Fail loudly here rather than once per scenario.
+PROTOCOL_SH="${PLUGIN_ROOT:-}/core/scripts/wiki-write-protocol/protocol.sh"
+if [ -z "${PLUGIN_ROOT:-}" ] || [ ! -f "$PROTOCOL_SH" ]; then
+    echo "protocol.sh not resolvable from PLUGIN_ROOT='${PLUGIN_ROOT:-<unset>}';" \
+         "run via tests/run.sh (it builds the artifact tree and exports it)" >&2
+    exit 1
+fi
+
 PASS=0
 FAIL=0
 FAILED=()
