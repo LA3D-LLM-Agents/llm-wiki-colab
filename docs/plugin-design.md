@@ -52,7 +52,22 @@ Argument substitution survives the move, so `/wiki-ask <agent> "<question>"` sti
 Codex has no command component at all and silently drops any command using `$ARGUMENTS` during its install-time migration, so a command-shaped `wiki-ask` would vanish for Codex consumers with no error at publish time.
 Shipping skills is what makes one source tree serve both harnesses.
 
+## Hook behavior on Codex
+
+Probed on codex-cli 0.147.0 against the emitted tree, with plugin hooks force-trusted by `--dangerously-bypass-hook-trust`.
+
+`hookSpecificOutput.additionalContext` from `hooks/session-start.sh` reaches the model.
+In a repo with a `.llm-wiki/`, the model quoted back index and log content that exists nowhere but the hook's output, without opening a file.
+The top-level `systemMessage` banner does not appear in a `codex exec` transcript; treat the user-visible banner as a Claude affordance.
+
+`hooks/ensure-wiki.py` and `hooks/session-start.sh` both run to completion, and neither reads stdin, so Codex's superset SessionStart payload changes nothing for them.
+
+A Codex `PostToolUse` payload for `apply_patch` carries `tool_input.command` holding the patch text and no `file_path` field, which is why `hooks/posttooluse.sh` reads the `*** Add File:` / `*** Update File:` / `*** Move to:` markers when `file_path` is absent.
+A shell write reports `tool_name` as `Bash`, the same spelling Claude uses, not `shell`.
+
+None of this changes the trust gate: without the bypass flag, plugin hooks on Codex are discovered and silently skipped, and `codex exec` has no approval flow.
+
 ## Open verification items
 
 - A repo with the GitHub Wiki feature disabled (not merely empty) should fail cleanly to the create-first-page path and never attach the main repo. Unconfirmed.
-- A live-session check that the SessionStart orientation actually appears in a real installed session. Unconfirmed.
+- A live-session check that the SessionStart orientation actually appears in a real installed Claude session. Unconfirmed.

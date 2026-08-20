@@ -68,6 +68,8 @@ CLAUDE_ONLY_SKILL_KEYS = {
     "model",
     "hooks",
 }
+# `metadata` must carry a mapping value: codex silently drops a skill whose
+# metadata is a scalar from the model-visible prompt (probed, codex-cli 0.147.0).
 CODEX_ONLY_SKILL_KEYS = {"metadata"}
 
 CLAUDE_SKILL_KEYS = UNIVERSAL_SKILL_KEYS | CLAUDE_ONLY_SKILL_KEYS
