@@ -4,6 +4,7 @@
 # (marketplace catalog and plugin).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
 source "$HERE/lib/assert.sh"
 require_env MARKETPLACE_TREE PLUGIN_ROOT
 
@@ -29,6 +30,22 @@ done
 [ "$(jq -r '.plugins[0].source // "MISSING"' "$CATALOG" 2>/dev/null)" = "./claude/plugins/llm-wiki" ] \
     && _pass "catalog plugins[0].source is ./claude/plugins/llm-wiki" \
     || _fail "catalog plugins[0].source is not ./claude/plugins/llm-wiki"
+
+# One VERSION, stamped everywhere. Anchoring to the source file rather than to
+# the artifact's own copy is the point: a build that stamped a constant would
+# still be self-consistent, and only a comparison against the input catches it.
+SRC_VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+TREE_VERSION="$(tr -d '[:space:]' < "$MARKETPLACE_TREE/VERSION" 2>/dev/null)"
+[ -n "$SRC_VERSION" ] && [ "$TREE_VERSION" = "$SRC_VERSION" ] \
+    && _pass "artifact VERSION matches the repo VERSION ($SRC_VERSION)" \
+    || _fail "artifact VERSION '$TREE_VERSION' does not match repo VERSION '$SRC_VERSION'"
+[ "$(jq -r '.version // "MISSING"' "$PLUGIN_MANIFEST" 2>/dev/null)" = "$SRC_VERSION" ] \
+    && _pass "claude plugin manifest carries $SRC_VERSION" \
+    || _fail "claude plugin manifest version is not $SRC_VERSION"
+assert_grep_file "$MARKETPLACE_TREE/CITATION.cff" "version: \"$SRC_VERSION\"" \
+    "emitted CITATION.cff carries $SRC_VERSION"
+assert_grep_file "$MARKETPLACE_TREE/README.md" "Version $SRC_VERSION," \
+    "emitted README states the version"
 
 if command -v claude >/dev/null 2>&1; then
     claude plugin validate "$MARKETPLACE_TREE" >/dev/null 2>&1 && _pass "claude plugin validate: marketplace" || _fail "marketplace validate"

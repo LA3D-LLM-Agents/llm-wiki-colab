@@ -42,8 +42,13 @@ CODEX_PLUGIN_DESCRIPTION = (
     "(index + last-5 log), verification-gate advisory, wiki-write-protocol push, "
     "and a knowledge-graph build."
 )
-CLAUDE_PLUGIN_MANIFEST = Path("plugins/llm-wiki/.claude-plugin/plugin.json")
-SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+VERSION_FILE = Path("VERSION")
+# Relative to a plugin directory, not to the repo root: after phase 4 the only
+# manifest that gets read is the emitted one, to stamp it.
+CLAUDE_MANIFEST_REL = Path(".claude-plugin/plugin.json")
+# (0|[1-9]\d*) rather than \d+: semver forbids leading zeros, and Codex uses
+# the string as a cache directory name.
+SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 TOKEN_RE = re.compile(r"\{\{([a-z_]+)\}\}")
 
@@ -210,6 +215,22 @@ def copy_repo_file(name: str, out: Path) -> None:
     shutil.copy2(src, out / name)
 
 
+def render_repo_file(name: str, out: Path, tokens: dict[str, str]) -> None:
+    """Hydrate a repo-root file's {{token}} placeholders into the output tree.
+
+    CITATION.cff has to stay a real, valid file at the repo root so GitHub's
+    cite button finds it, and it has to carry the version. Hydration is the
+    repo's existing dependency-free way to do that, and scan_for_tokens fails
+    the build if a placeholder ever survives.
+    """
+    src = REPO_ROOT / name
+    if not src.is_file():
+        raise AssembleError(f"missing repo file: {src}")
+    (out / name).write_text(
+        hydrate(src.read_text(encoding="utf-8"), tokens, str(src)), encoding="utf-8"
+    )
+
+
 def plugin_ignore(root: Path):
     """Build a shutil.copytree ignore callable for the plugin source tree."""
 
@@ -305,24 +326,44 @@ def write_marketplace(out: Path, owner_repo: str) -> None:
     dest.write_text(json.dumps(catalog, indent=2) + "\n")
 
 
-def plugin_version() -> str:
-    """Resolve the semver stamped into the Codex plugin manifest.
+def read_version() -> str:
+    """Read the repo's single version, from the top-level VERSION file.
 
-    TODO(version-file): a later phase adds a top-level VERSION file that stamps
-    every manifest. Read it here first when it exists, and keep this fallback
-    only until plugin.json stops being the source of truth.
+    Every emitted manifest is stamped from this one read. Codex keys its
+    install cache on the manifest version and nothing else, so a malformed or
+    missing version has to fail the build rather than ship.
     """
-    src = REPO_ROOT / CLAUDE_PLUGIN_MANIFEST
+    src = REPO_ROOT / VERSION_FILE
     try:
-        version = json.loads(src.read_text(encoding="utf-8")).get("version")
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = src.read_text(encoding="utf-8")
+    except OSError as exc:
         raise AssembleError(f"cannot read {src}: {exc}") from exc
-    if not isinstance(version, str) or not SEMVER_RE.match(version):
+    version = raw.strip()
+    if not SEMVER_RE.match(version):
         raise AssembleError(
-            f"{src}: version must be MAJOR.MINOR.PATCH for the Codex cache key, "
-            f"got {version!r}"
+            f"{src}: version must be a single MAJOR.MINOR.PATCH line, got {raw!r}"
         )
     return version
+
+
+def stamp_claude_plugin_manifest(plugin_dir: Path, version: str) -> None:
+    """Stamp the version into the copied Claude plugin manifest.
+
+    The source manifest deliberately carries no version field: VERSION is the
+    only place a version is written by hand.
+    """
+    dest = plugin_dir / CLAUDE_MANIFEST_REL
+    try:
+        manifest = json.loads(dest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AssembleError(f"cannot read {dest}: {exc}") from exc
+    if "version" in manifest:
+        raise AssembleError(
+            f"{REPO_ROOT / 'plugins' / PLUGIN_NAME / CLAUDE_MANIFEST_REL}: "
+            "remove the version field; VERSION is the single source of truth"
+        )
+    stamped = {"name": manifest.pop("name", PLUGIN_NAME), "version": version, **manifest}
+    dest.write_text(json.dumps(stamped, indent=2) + "\n", encoding="utf-8")
 
 
 CODEX_POSTTOOLUSE_MATCHER = "apply_patch"
@@ -351,7 +392,7 @@ def write_codex_hooks(plugin_dir: Path) -> None:
     dest.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def copy_codex_plugin(out: Path) -> None:
+def copy_codex_plugin(out: Path, version: str) -> None:
     """Copy plugins/llm-wiki into the Codex subtree, minus excluded paths.
 
     Deliberately a near-copy of copy_plugin. Two concrete emitters come first;
@@ -372,15 +413,15 @@ def copy_codex_plugin(out: Path) -> None:
             f"expected {claude_manifest_dir} in the copied plugin tree"
         )
     shutil.rmtree(claude_manifest_dir)
-    write_codex_plugin_manifest(dest)
+    write_codex_plugin_manifest(dest, version)
     write_codex_hooks(dest)
 
 
-def write_codex_plugin_manifest(plugin_dir: Path) -> None:
+def write_codex_plugin_manifest(plugin_dir: Path, version: str) -> None:
     """Generate .codex-plugin/plugin.json for the Codex subtree."""
     manifest = {
         "name": PLUGIN_NAME,
-        "version": plugin_version(),
+        "version": version,
         "description": CODEX_PLUGIN_DESCRIPTION,
         "author": {
             "name": "LA3D-LLM-Agents",
@@ -438,22 +479,31 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def assemble(out: Path, owner_repo: str, source_ref: str) -> None:
+def assemble(out: Path, owner_repo: str, source_ref: str, version: str) -> None:
     """Emit the full artifact tree into an already-validated output directory."""
-    tokens = {"owner_repo": owner_repo, "source_ref": source_ref}
+    tokens = {
+        "owner_repo": owner_repo,
+        "source_ref": source_ref,
+        "version": version,
+    }
     reset_dir(out)
     render_template("readme.md", out / "README.md", tokens)
     copy_repo_file("LICENSE", out)
-    copy_repo_file("CITATION.cff", out)
+    render_repo_file("CITATION.cff", out, tokens)
+    # The artifact tree states its own version at a fixed, platform-neutral
+    # path. build/publish.py reads this file out of the parent commit to decide
+    # whether a publish carries a bump.
+    (out / VERSION_FILE).write_text(version + "\n", encoding="utf-8")
 
     # Claude subtree.
     write_marketplace(out, owner_repo)
     copy_plugin(out)
+    stamp_claude_plugin_manifest(out / "claude" / "plugins" / PLUGIN_NAME, version)
     strip_skill_frontmatter(out / "claude" / "plugins" / PLUGIN_NAME, CLAUDE_SKILL_KEYS)
 
     # Codex subtree.
     write_codex_marketplace(out)
-    copy_codex_plugin(out)
+    copy_codex_plugin(out, version)
     strip_skill_frontmatter(out / "codex" / "plugins" / PLUGIN_NAME, CODEX_SKILL_KEYS)
 
 
@@ -465,7 +515,8 @@ def main(argv: list[str] | None = None) -> int:
         if owner_repo.count("/") != 1 or not all(owner_repo.split("/")):
             raise AssembleError(f"--owner-repo must be OWNER/REPO, got {owner_repo!r}")
         source_ref = args.source_ref or default_source_ref()
-        assemble(out, owner_repo, source_ref)
+        version = read_version()
+        assemble(out, owner_repo, source_ref, version)
     except AssembleError as exc:
         print(f"assemble: error: {exc}", file=sys.stderr)
         return 1
@@ -480,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"out:        {out}")
     print(f"owner_repo: {owner_repo}")
     print(f"source_ref: {source_ref}")
+    print(f"version:    {version}")
     print(f"files:      {count_files(out)}")
     return 0
 

@@ -50,4 +50,4 @@ A machine-readable `CITATION.cff` is included in the source repository.
 
 ## Provenance
 
-Built from src commit {{source_ref}}.
+Version {{version}}, built from src commit {{source_ref}}.

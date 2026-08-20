@@ -61,6 +61,14 @@ fi
     && _pass "both platform manifests carry version $CODEX_VERSION" \
     || _fail "version drift: claude $CLAUDE_VERSION vs codex $CODEX_VERSION"
 
+# Anchor to the artifact's own VERSION file, which test_manifests.sh in turn
+# anchors to the repo's. Codex reads this number as a cache directory name, so
+# it is the one field where drift is invisible until users stop getting updates.
+TREE_VERSION="$(tr -d '[:space:]' < "$MARKETPLACE_TREE/VERSION" 2>/dev/null)"
+[ "$CODEX_VERSION" = "$TREE_VERSION" ] \
+    && _pass "codex manifest matches the artifact VERSION file ($TREE_VERSION)" \
+    || _fail "codex manifest $CODEX_VERSION does not match artifact VERSION $TREE_VERSION"
+
 # Hook wiring. Codex names the patch tool apply_patch; Claude names file writes
 # Write|Edit. Asserting both sides catches a transform that rewrote the wrong
 # tree as well as one that rewrote neither.

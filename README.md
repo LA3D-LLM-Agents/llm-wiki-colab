@@ -14,6 +14,7 @@ A machine-readable [`CITATION.cff`](CITATION.cff) is in the repo, so GitHub show
 
 | Path                | Contents                                               |
 | ------------------- | ------------------------------------------------------ |
+| `VERSION`           | the single version stamped into every emitted manifest |
 | `plugins/llm-wiki/` | the plugin source                                      |
 | `build/`            | assembly tooling and templates                         |
 | `tests/`            | behavior tests run against build output                |

@@ -25,6 +25,14 @@ Behavior tests are plain bash.
 Artifact-tree templates under `build/templates/` use `{{token}}` placeholders.
 The build fails if any token survives unhydrated into output.
 
+## Versioning
+
+`VERSION` at the repository root holds one `MAJOR.MINOR.PATCH` line and is the only place a version is written by hand.
+The build stamps it into every emitted manifest, so bumping is a one-file edit.
+
+A bump is an ordinary source commit on `src`: edit `VERSION`, commit, publish.
+`build/publish.py` refuses to publish a changed tree that reuses the version the target branch already carries, so a forgotten bump fails the publish rather than shipping an update Codex users never receive.
+
 ## CI and evaluation boundaries
 
 CI runs only deterministic gates: build, validation, and behavior tests.
