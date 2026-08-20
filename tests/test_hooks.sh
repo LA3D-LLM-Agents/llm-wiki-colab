@@ -37,6 +37,48 @@ assert_contains "$out" "Verification Gate" "PostToolUse advisory on wiki write"
 out="$(printf '{"tool_input":{"file_path":"src/main.py"}}' | bash "$HOOKS/posttooluse.sh")"
 assert_empty "$out" "PostToolUse silent outside .llm-wiki/"
 
+# 3b. PostToolUse on Codex: tool_input carries only the apply_patch text, with
+#     no file_path field. These two command strings are verbatim captures from a
+#     live codex-cli 0.147.0 session, so the positive case is bound to the real
+#     payload shape rather than to an assumption about it.
+out="$(printf '%s' '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: .llm-wiki/Alpha.md\n@@\n+- Second note.\n*** End Patch"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_contains "$out" "Verification Gate" "PostToolUse advisory on a codex apply_patch to a wiki page"
+
+out="$(printf '%s' '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Add File: notes.txt\n+hello\n*** End Patch"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_empty "$out" "PostToolUse silent on a codex apply_patch outside .llm-wiki/"
+
+# A new wiki page and a page moved into the wiki are both writes.
+out="$(printf '%s' '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Add File: .llm-wiki/New.md\n+x\n*** End Patch"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_contains "$out" "Verification Gate" "PostToolUse advisory on a codex apply_patch adding a wiki page"
+
+out="$(printf '%s' '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: notes.md\n*** Move to: .llm-wiki/Moved.md\n*** End Patch"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_contains "$out" "Verification Gate" "PostToolUse advisory on a page moved into the wiki"
+
+# One apply_patch can touch several files. The advisory must fire once, not once
+# per file, and must not be missed because the wiki page is not the first entry.
+out="$(printf '%s' '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: src/main.py\n+x\n*** Update File: .llm-wiki/Alpha.md\n+y\n*** Update File: README.md\n+z\n*** End Patch"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_contains "$out" "Verification Gate" "PostToolUse advisory on a multi-file patch touching a wiki page"
+[ "$(printf '%s' "$out" | grep -c 'Verification Gate')" = "1" ] \
+    && _pass "PostToolUse advisory fires once per patch, not once per file" \
+    || _fail "PostToolUse advisory repeated within a single patch"
+
+# A shell redirect into the wiki reports as tool_name Bash and carries no patch
+# markers. The emitted codex matcher is apply_patch so this payload never
+# reaches the script in practice; asserting it here pins the known blind spot so
+# a future matcher widening has to change this line deliberately.
+out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"printf x > .llm-wiki/Beta.md"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_empty "$out" "PostToolUse silent on a shell write into .llm-wiki/ (known gap)"
+
+# Nothing in the patch grammar may be mistaken for a target.
+out="$(printf '%s' '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Delete File: .llm-wiki/Old.md\n*** End Patch"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_empty "$out" "PostToolUse silent on a wiki page deletion"
+
+out="$(printf '%s' '{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Update File: .llm-wiki/notes.txt\n+x\n*** End Patch"}}' | bash "$HOOKS/posttooluse.sh")"
+assert_empty "$out" "PostToolUse silent on a non-markdown file inside .llm-wiki/"
+
+out="$(printf '%s' '{}' | bash "$HOOKS/posttooluse.sh")"
+assert_empty "$out" "PostToolUse silent on a payload with no tool_input"
+
 # 4. Opt-in: a repo WITH a GitHub wiki but no .llm-wiki/ stays silent (no auto-clone).
 #    Points at a real wiki-bearing repo; the opt-in hook returns before any
 #    network, so this is deterministic and offline. Attaching is /wiki-init's job.

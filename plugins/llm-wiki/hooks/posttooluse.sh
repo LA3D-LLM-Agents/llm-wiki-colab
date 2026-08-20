@@ -24,17 +24,50 @@
 
 INPUT=$(cat)
 
-# Extract the path of the file just written or edited. Empty if absent or
-# if jq is unavailable; either way the script simply does not nudge.
+# Extract the path of the file just written or edited. Two harness shapes:
+#
+#   Claude  tool_input.file_path is the target path.
+#   Codex   tool_input carries only `command`, holding the apply_patch text;
+#           there is no file_path field at all (probed on codex-cli 0.147.0).
+#           The target paths are the `*** Add File:` / `*** Update File:` /
+#           `*** Move to:` markers inside that patch.
+#
+# Claude behavior is unchanged: file_path is present there, so the patch-marker
+# branch never runs. Empty on either path means no nudge, the same silent no-op
+# the script already produced for every non-wiki edit.
 FILE_PATH=""
+PATCH_TARGETS=""
 if command -v jq >/dev/null 2>&1; then
     FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+    if [ -z "$FILE_PATH" ]; then
+        # Three separate -e expressions rather than one alternation: \| is a GNU
+        # sed extension and this script also runs on macOS.
+        PATCH_TARGETS=$(printf '%s' "$INPUT" \
+            | jq -r '.tool_input.command // empty' 2>/dev/null \
+            | sed -n \
+                -e 's/^\*\*\* Add File: //p' \
+                -e 's/^\*\*\* Update File: //p' \
+                -e 's/^\*\*\* Move to: //p' \
+            || true)
+    fi
 fi
 
-# Nudge only for a write/edit to a wiki page under the opt-in .llm-wiki/ dir.
-case "$FILE_PATH" in
-    */.llm-wiki/*.md|.llm-wiki/*.md)
-        cat <<'EOF'
+# Nudge once if any target is a wiki page under the opt-in .llm-wiki/ dir.
+# A patch may touch several files, so this scans all of them and stops at the
+# first wiki page rather than emitting the advisory per file.
+MATCHED=0
+while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    case "$candidate" in
+        */.llm-wiki/*.md|.llm-wiki/*.md) MATCHED=1; break ;;
+    esac
+done <<EOF
+$FILE_PATH
+$PATCH_TARGETS
+EOF
+
+if [ "$MATCHED" -eq 1 ]; then
+    cat <<'EOF'
 A wiki page was just written or edited. Before committing in the wiki
 repo, run the Verification Gate (core/agents/verification-gate.md in the
 llm-wiki plugin) over every page created or edited this session: every
@@ -42,7 +75,6 @@ numerical claim tagged with its corpus, every projection marked as such,
 back-references bidirectional, and the index plus log updated. This is an
 advisory reminder and does not block.
 EOF
-        ;;
-esac
+fi
 
 exit 0
