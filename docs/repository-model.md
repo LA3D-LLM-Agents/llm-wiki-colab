@@ -38,7 +38,7 @@ Publishing to `main` requires an explicit flag; every other branch publishes wit
 The script only moves a local ref.
 Pushing the branch is the caller's responsibility.
 
-Every publish commit records the source ref and the versions of the tools that produced it in its message, so a published tree can always be traced back to the commit and toolchain it came from.
+Every publish commit records the version, the source ref, and the versions of the tools that produced it in its message, so a published tree can always be traced back to the commit and toolchain it came from.
 
 ## Multi-ecosystem target
 
@@ -51,11 +51,24 @@ The two emitters are deliberately near-duplicates. Generalizing across them is d
 
 ## Publishing policy
 
-While Claude is the only platform, publishing is continuous: every green `src` build publishes to `main`.
-Claude installs are keyed by commit SHA, so every publish is naturally versioned and safe to ship without a separate release step.
+`VERSION` at the repository root is the single version of the artifact.
+Every version that ships is stamped from it: the Claude plugin manifest, the Codex plugin manifest, `CITATION.cff`, a `VERSION` file at the artifact root, and the publish commit message.
+No version is written by hand anywhere else, and a source manifest that carries its own version field fails the build.
 
-Codex keys its cache on manifest semver instead of commit SHA.
-Once the Codex emitter lands, publishing becomes gated on a version bump rather than continuous.
+Publishing is gated on a bump.
+A publish whose assembled tree differs from the target branch's current tree, and whose version has not increased over the version that branch already records, is refused.
+Codex refreshes an install only when the manifest version changes, so a changed tree published under an unchanged version reaches no Codex user, while Claude installs, keyed by commit SHA, would receive it.
+That divergence is what the gate exists to prevent.
+
+The gate applies to every branch, not only to `main`.
+A gate that runs only on the branch nobody publishes to daily is a gate nobody has watched work.
+The one waiver is bootstrap: a parent that records no version at all, neither a `VERSION` file nor an emitted plugin manifest in any known layout, publishes with a `bootstrap:` line and no comparison.
+
+The emitted README records the source commit, so any change on `src` changes the artifact tree.
+In practice that means every publish needs a version bump, including a documentation-only one.
+
+`--force-version` overrides the gate on a throwaway branch and is refused for `main`.
+`--skip-gates` skips the behavior suite only; it never skips the version gate.
 
 ## Install identity invariants
 
