@@ -62,6 +62,22 @@ def git(*args: str) -> str:
     return result.stdout.strip()
 
 
+def jj(*args: str) -> str:
+    """Run a read-only jj command in the repo root and return stdout."""
+    result = subprocess.run(
+        ["jj", *args],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssembleError(
+            f"jj {' '.join(args)} failed: {result.stderr.strip() or 'no output'}"
+        )
+    return result.stdout.strip()
+
+
 def parse_owner_repo(remote_url: str) -> str:
     """Extract OWNER/REPO from an https or ssh git remote URL."""
     url = remote_url.strip().removesuffix(".git")
@@ -72,14 +88,41 @@ def parse_owner_repo(remote_url: str) -> str:
 
 
 def default_owner_repo() -> str:
-    """Derive OWNER/REPO from the origin remote."""
+    """Derive OWNER/REPO from the origin remote, via git or jj.
+
+    A secondary jj workspace carries only a .jj pointer and no .git, so git
+    fails outright there; jj answers the same question from the shared repo.
+    """
     try:
-        remote_url = git("remote", "get-url", "origin")
-    except AssembleError as exc:
-        raise AssembleError(
-            "no git remote 'origin' found; pass --owner-repo OWNER/REPO explicitly"
-        ) from exc
-    return parse_owner_repo(remote_url)
+        return parse_owner_repo(git("remote", "get-url", "origin"))
+    except (AssembleError, OSError):
+        pass
+    try:
+        for line in jj("git", "remote", "list").splitlines():
+            fields = line.split()
+            if len(fields) == 2 and fields[0] == "origin":
+                return parse_owner_repo(fields[1])
+    except (AssembleError, OSError):
+        pass
+    raise AssembleError(
+        "no git remote 'origin' found via git or jj; "
+        "pass --owner-repo OWNER/REPO explicitly"
+    )
+
+
+def default_source_ref() -> str:
+    """Resolve the current commit, via git or jj."""
+    try:
+        return git("rev-parse", "HEAD")
+    except (AssembleError, OSError):
+        pass
+    try:
+        return jj("log", "-r", "@", "--no-graph", "-T", "commit_id")
+    except (AssembleError, OSError):
+        pass
+    raise AssembleError(
+        "cannot resolve HEAD via git or jj; pass --source-ref SHA explicitly"
+    )
 
 
 def resolve_out_dir(raw_out: str | None) -> Path:
@@ -221,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         owner_repo = args.owner_repo or default_owner_repo()
         if owner_repo.count("/") != 1 or not all(owner_repo.split("/")):
             raise AssembleError(f"--owner-repo must be OWNER/REPO, got {owner_repo!r}")
-        source_ref = args.source_ref or git("rev-parse", "HEAD")
+        source_ref = args.source_ref or default_source_ref()
         assemble(out, owner_repo, source_ref)
     except AssembleError as exc:
         print(f"assemble: error: {exc}", file=sys.stderr)

@@ -24,7 +24,12 @@ if [ -e "$OUT/.prebuilt" ]; then
     echo "===== build (reusing prebuilt tree at $OUT) ====="
 else
     echo "===== build ====="
-    if ! uv run "$ROOT/build/assemble.py" --out "$OUT"; then
+    # Tests assert on tree shape, never on provenance, so the build gets fixed
+    # values rather than reaching for a VCS. This keeps the suite runnable from
+    # a secondary jj workspace that has no .git at all.
+    if ! uv run "$ROOT/build/assemble.py" --out "$OUT" \
+        --owner-repo "${LLM_WIKI_OWNER_REPO:-LA3D-LLM-Agents/llm-wiki-colab}" \
+        --source-ref "${LLM_WIKI_SOURCE_REF:-0000000000000000000000000000000000000000}"; then
         echo "########## build FAILED; cannot test the artifact ##########"
         exit 1
     fi
