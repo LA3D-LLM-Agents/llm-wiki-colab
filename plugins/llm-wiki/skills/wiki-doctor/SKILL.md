@@ -1,8 +1,8 @@
 ---
-description: Self-check that the llm-wiki plugin is wired up correctly in this repo.
+name: wiki-doctor
+description: Self-check that the llm-wiki plugin is wired up correctly in this repo. Use when the wiki seems inactive, hooks are not firing, or a fresh install needs verifying.
+disable-model-invocation: true
 ---
-
-# /wiki-doctor — connectivity self-check
 
 Run the doctor script from the project root and report its output verbatim:
 

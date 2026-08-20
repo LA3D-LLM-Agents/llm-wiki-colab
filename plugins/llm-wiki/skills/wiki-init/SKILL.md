@@ -1,8 +1,8 @@
 ---
-description: Initialize or attach this project's llm-wiki durable memory (.llm-wiki/).
+name: wiki-init
+description: Initialize or attach this project's llm-wiki durable memory at .llm-wiki/. Use when a repo needs its wiki cloned from GitHub or scaffolded for the first time.
+disable-model-invocation: true
 ---
-
-# /wiki-init — ensure/attach the llm-wiki
 
 Idempotent. Never clobbers an existing wiki. Resolve the state, then act.
 

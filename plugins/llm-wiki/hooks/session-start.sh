@@ -72,7 +72,7 @@ Every wiki edit ends with a commit in the wiki's own repo:
 Run these without asking; local commits are reversible. Push only on explicit
 request (use the wiki-write-protocol wrapper).
 
-Slash commands: /wiki-init, /wiki-experiment, /wiki-source, /wiki-lint, /wiki-doctor.
+User-invocable skills: /wiki-init, /wiki-experiment, /wiki-source, /wiki-lint, /wiki-doctor.
 </system-reminder>
 EOF
 

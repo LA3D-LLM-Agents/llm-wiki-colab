@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# L1: every file the hooks/commands/skills reference via ${CLAUDE_PLUGIN_ROOT}/...
+# L1: every file the hooks/skills reference via ${CLAUDE_PLUGIN_ROOT}/...
 # must be present in the built artifact tree, and the artifact's top level must
 # carry the catalog and the repo files the install advertises.
 set -uo pipefail
@@ -7,7 +7,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/lib/assert.sh"
 require_env MARKETPLACE_TREE PLUGIN_ROOT
 
-# Files referenced from the plugin's own commands/hooks/skills.
+# Files referenced from the plugin's own hooks/skills.
 for f in \
     core/init-wiki.sh \
     core/Edge-Types.md.template \
@@ -26,13 +26,10 @@ for f in \
     hooks/posttooluse.sh \
     hooks/hooks.json \
     .claude-plugin/plugin.json \
-    commands/wiki-init.md \
-    commands/wiki-doctor.md \
-    commands/wiki-ask.md \
-    commands/wiki-enroll.md \
-    commands/wiki-lint.md \
-    commands/wiki-source.md \
-    commands/wiki-experiment.md \
+    skills/wiki-init/SKILL.md \
+    skills/wiki-doctor/SKILL.md \
+    skills/wiki-ask/SKILL.md \
+    skills/wiki-enroll/SKILL.md \
     skills/wiki-lint/SKILL.md \
     skills/wiki-source/SKILL.md \
     skills/wiki-experiment/SKILL.md; do
@@ -51,6 +48,10 @@ done
 # The plugin source deliberately carries no catalog; it exists only in output.
 assert_no_file "$PLUGIN_ROOT/.claude-plugin/marketplace.json" \
     "no catalog inside the plugin subtree"
+
+# The plugin ships zero commands: every entry point is a skill.
+assert_no_file "$PLUGIN_ROOT/commands" \
+    "no commands/ directory in the built plugin"
 
 # Template hydration: no {{token}} may survive into the shipped README.
 assert_not_contains "$(cat "$MARKETPLACE_TREE/README.md" 2>/dev/null)" "{{" \

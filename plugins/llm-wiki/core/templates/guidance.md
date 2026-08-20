@@ -25,4 +25,4 @@ Run these without asking; local commits are reversible. Before committing, run t
 
 Honest reporting: bad results and contradicted claims get filed truthfully, not polished; never report metrics from projections, only from real outputs. See `core/agents/discipline-gates.md` for the "Universal Rationalizations (Always Wrong)" table.
 
-Slash commands: `/wiki-init` (attach or create the wiki), `/wiki-experiment`, `/wiki-source`, `/wiki-lint`, `/wiki-doctor` (self-check). The proactive behavior above is the default; the commands exist to force an action explicitly.
+User-invocable skills: `/wiki-init` (attach or create the wiki), `/wiki-experiment`, `/wiki-source`, `/wiki-lint`, `/wiki-doctor` (self-check). The proactive behavior above is the default; these skills exist to force an action explicitly.

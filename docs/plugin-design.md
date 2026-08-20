@@ -38,7 +38,19 @@ A clean install exits 0.
 
 `/wiki-enroll` publishes this repo to the federation: an agent card plus a discovery topic.
 
-Federation commands depend on `jq`, `curl`, and `gh`.
+Federation skills depend on `jq`, `curl`, and `gh`.
+
+## Every component is a skill
+
+The plugin ships skills only, no commands.
+A Claude Code command is a skill with `disable-model-invocation: true`: the user invokes it as `/wiki-init` exactly as before, and the model never picks it up on its own.
+Argument substitution survives the move, so `/wiki-ask <agent> "<question>"` still reaches `$ARGUMENTS`.
+
+`wiki-init`, `wiki-doctor`, `wiki-ask`, and `wiki-enroll` carry `disable-model-invocation: true` because each one runs a script with side effects that the user should be the one to trigger.
+`wiki-experiment`, `wiki-source`, and `wiki-lint` omit the key and stay model-invocable, which is what they already did as skills.
+
+Codex has no command component at all and silently drops any command using `$ARGUMENTS` during its install-time migration, so a command-shaped `wiki-ask` would vanish for Codex consumers with no error at publish time.
+Shipping skills is what makes one source tree serve both harnesses.
 
 ## Open verification items
 

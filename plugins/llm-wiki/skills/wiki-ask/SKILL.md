@@ -1,5 +1,7 @@
 ---
-description: Consult federated llm-wiki agent(s) via the ask primitive (clone-and-invoke).
+name: wiki-ask
+description: Consult a federated llm-wiki agent's wiki via the ask primitive (clone-and-invoke). Use when another project's durable memory would answer the question at hand.
+disable-model-invocation: true
 ---
 
 You are running the **ask** primitive: synchronous cross-agent consultation via `${CLAUDE_PLUGIN_ROOT}/core/scripts/agent-comms/ask.sh`. It fetches the federation index, clones the target agent's wiki into a local cache, and invokes an LLM there with the wiki Query procedure, so you consult another project's llm-wiki without leaving this session.

@@ -1,5 +1,7 @@
 ---
-description: Register this repo as a federation agent (publish an agent Card, add the discovery topic).
+name: wiki-enroll
+description: Register this repo as a federation agent by publishing an agent Card and adding the discovery topic. Use when this project should become discoverable by peer llm-wiki agents.
+disable-model-invocation: true
 ---
 
 Run the enrollment helper and relay its interactive output:
