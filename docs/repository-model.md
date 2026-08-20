@@ -46,8 +46,8 @@ Every publish commit records the source ref and the versions of the tools that p
 Antigravity has no marketplace concept of its own, so its tree is installed by local path rather than through a catalog.
 Each platform's catalog points only at its own subtree, and each platform gets a native manifest emitted for it.
 
-Only the Claude emitter exists initially.
-Generalizing the build across emitters is deliberately deferred until a second platform (Codex) exists, so the shared abstraction is extracted from two concrete instances rather than designed up front.
+The Claude and Codex emitters both exist as of this build; Cursor and Antigravity do not.
+The two emitters are deliberately near-duplicates. Generalizing across them is deferred until the shared abstraction can be extracted from concrete instances rather than guessed at.
 
 ## Publishing policy
 

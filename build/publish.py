@@ -152,6 +152,7 @@ def build_message(source_ref: str, file_count: int) -> str:
             "",
             f"source-ref: {source_ref}",
             f"claude-cli: {tool_version(['claude', '--version'])}",
+            f"codex-cli: {tool_version(['codex', '--version'])}",
             f"assembled-files: {file_count}",
             "",
         ]

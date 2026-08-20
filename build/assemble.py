@@ -35,11 +35,46 @@ PLUGIN_DESCRIPTION = (
     "and a knowledge-graph build."
 )
 PLUGIN_SOURCE = "./claude/plugins/llm-wiki"
+CODEX_PLUGIN_SOURCE = "./codex/plugins/llm-wiki"
+CODEX_MARKETPLACE_DISPLAY_NAME = "LLM-wiki Colab"
+CODEX_PLUGIN_DESCRIPTION = (
+    "Opt-in per-repo llm-wiki memory for Codex: SessionStart orientation "
+    "(index + last-5 log), verification-gate advisory, wiki-write-protocol push, "
+    "and a knowledge-graph build."
+)
+CLAUDE_PLUGIN_MANIFEST = Path("plugins/llm-wiki/.claude-plugin/plugin.json")
+SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 TOKEN_RE = re.compile(r"\{\{([a-z_]+)\}\}")
 
 EXCLUDED_NAMES = {".DS_Store", "__pycache__"}
 EXCLUDED_PLUGIN_SUBPATHS = {Path("core/scripts/kg/build")}
+
+# Skill frontmatter routing. `name` and `description` are the three-way lowest
+# common denominator every harness reads. Everything else belongs to exactly one
+# harness, and each emitter drops the keys its harness does not own.
+UNIVERSAL_SKILL_KEYS = {"name", "description"}
+CLAUDE_ONLY_SKILL_KEYS = {
+    "disable-model-invocation",
+    "user-invocable",
+    "when_to_use",
+    "argument-hint",
+    "allowed-tools",
+    "paths",
+    "context",
+    "agent",
+    "effort",
+    "shell",
+    "model",
+    "hooks",
+}
+CODEX_ONLY_SKILL_KEYS = {"metadata"}
+
+CLAUDE_SKILL_KEYS = UNIVERSAL_SKILL_KEYS | CLAUDE_ONLY_SKILL_KEYS
+CODEX_SKILL_KEYS = UNIVERSAL_SKILL_KEYS | CODEX_ONLY_SKILL_KEYS
+KNOWN_SKILL_KEYS = CLAUDE_SKILL_KEYS | CODEX_SKILL_KEYS
+
+FRONTMATTER_KEY_RE = re.compile(r"^([A-Za-z0-9_-]+):")
 
 
 class AssembleError(Exception):
@@ -198,6 +233,56 @@ def copy_plugin(out: Path) -> None:
     shutil.copytree(src, dest, ignore=plugin_ignore(src))
 
 
+def rewrite_skill_frontmatter(path: Path, allowed: set[str]) -> None:
+    """Drop the frontmatter keys this harness does not read, in place.
+
+    The plugin's frontmatter is flat `key: value` YAML, so a line scanner is
+    enough and keeps assemble.py dependency-free. An unrecognized key is a hard
+    error: a new key must be routed to a harness deliberately, not leak into
+    every subtree by default.
+    """
+    text = path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        raise AssembleError(f"{path}: SKILL.md does not open with a --- fence")
+    try:
+        close = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    except StopIteration:
+        raise AssembleError(f"{path}: SKILL.md frontmatter is not closed") from None
+
+    kept: list[str] = []
+    keeping = True
+    seen: set[str] = set()
+    for line in lines[1:close]:
+        match = FRONTMATTER_KEY_RE.match(line)
+        if match:
+            key = match.group(1)
+            if key not in KNOWN_SKILL_KEYS:
+                raise AssembleError(
+                    f"{path}: unknown skill frontmatter key {key!r}; add it to "
+                    "CLAUDE_ONLY_SKILL_KEYS or CODEX_ONLY_SKILL_KEYS"
+                )
+            seen.add(key)
+            keeping = key in allowed
+        # A continuation line (indented, or a list item) belongs to the key above it.
+        if keeping:
+            kept.append(line)
+
+    missing = sorted(UNIVERSAL_SKILL_KEYS - seen)
+    if missing:
+        raise AssembleError(
+            f"{path}: SKILL.md frontmatter is missing " + ", ".join(missing)
+        )
+
+    path.write_text("\n".join(["---", *kept, *lines[close:]]), encoding="utf-8")
+
+
+def strip_skill_frontmatter(plugin_dir: Path, allowed: set[str]) -> None:
+    """Apply the frontmatter routing to every SKILL.md under a plugin subtree."""
+    for skill in sorted(plugin_dir.glob("skills/*/SKILL.md")):
+        rewrite_skill_frontmatter(skill, allowed)
+
+
 def write_marketplace(out: Path, owner_repo: str) -> None:
     """Generate .claude-plugin/marketplace.json for the Claude subtree."""
     owner = owner_repo.split("/", 1)[0]
@@ -214,6 +299,111 @@ def write_marketplace(out: Path, owner_repo: str) -> None:
         ],
     }
     dest = out / ".claude-plugin" / "marketplace.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(catalog, indent=2) + "\n")
+
+
+def plugin_version() -> str:
+    """Resolve the semver stamped into the Codex plugin manifest.
+
+    TODO(version-file): a later phase adds a top-level VERSION file that stamps
+    every manifest. Read it here first when it exists, and keep this fallback
+    only until plugin.json stops being the source of truth.
+    """
+    src = REPO_ROOT / CLAUDE_PLUGIN_MANIFEST
+    try:
+        version = json.loads(src.read_text(encoding="utf-8")).get("version")
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AssembleError(f"cannot read {src}: {exc}") from exc
+    if not isinstance(version, str) or not SEMVER_RE.match(version):
+        raise AssembleError(
+            f"{src}: version must be MAJOR.MINOR.PATCH for the Codex cache key, "
+            f"got {version!r}"
+        )
+    return version
+
+
+CODEX_POSTTOOLUSE_MATCHER = "apply_patch"
+CODEX_HOOKS_ROOT_KEYS = {"description", "hooks"}
+
+
+def write_codex_hooks(plugin_dir: Path) -> None:
+    """Rewrite the copied hooks.json for Codex's tool names.
+
+    Only the PostToolUse matcher differs: Claude reports file writes as
+    Write|Edit, Codex reports them as apply_patch. Deriving the Codex file from
+    the Claude one keeps the SessionStart wiring from drifting, which matters
+    because an untrusted or malformed Codex hooks file fails silently.
+    """
+    dest = plugin_dir / "hooks" / "hooks.json"
+    data = json.loads(dest.read_text(encoding="utf-8"))
+    unknown = sorted(set(data) - CODEX_HOOKS_ROOT_KEYS)
+    if unknown:
+        raise AssembleError(
+            f"{dest}: root key(s) {', '.join(unknown)} would fail Codex's "
+            "deny-unknown-fields parse; route them per harness"
+        )
+    for entry in data.get("hooks", {}).get("PostToolUse", []):
+        if "matcher" in entry:
+            entry["matcher"] = CODEX_POSTTOOLUSE_MATCHER
+    dest.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def copy_codex_plugin(out: Path) -> None:
+    """Copy plugins/llm-wiki into the Codex subtree, minus excluded paths.
+
+    Deliberately a near-copy of copy_plugin. Two concrete emitters come first;
+    the shared abstraction is extracted from them, not designed ahead of them.
+    """
+    src = (REPO_ROOT / "plugins" / PLUGIN_NAME).resolve()
+    if not src.is_dir():
+        raise AssembleError(f"missing plugin source: {src}")
+    dest = out / "codex" / "plugins" / PLUGIN_NAME
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dest, ignore=plugin_ignore(src))
+    # Claude's manifest must not ride along: Codex resolves .codex-plugin first
+    # but falls back to .claude-plugin, and a stale second manifest is exactly
+    # the silent-divergence trap that fallback creates.
+    claude_manifest_dir = dest / ".claude-plugin"
+    if not claude_manifest_dir.is_dir():
+        raise AssembleError(
+            f"expected {claude_manifest_dir} in the copied plugin tree"
+        )
+    shutil.rmtree(claude_manifest_dir)
+    write_codex_plugin_manifest(dest)
+    write_codex_hooks(dest)
+
+
+def write_codex_plugin_manifest(plugin_dir: Path) -> None:
+    """Generate .codex-plugin/plugin.json for the Codex subtree."""
+    manifest = {
+        "name": PLUGIN_NAME,
+        "version": plugin_version(),
+        "description": CODEX_PLUGIN_DESCRIPTION,
+        "author": {
+            "name": "LA3D-LLM-Agents",
+            "url": "https://github.com/LA3D-LLM-Agents",
+        },
+    }
+    dest = plugin_dir / ".codex-plugin" / "plugin.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(manifest, indent=2) + "\n")
+
+
+def write_codex_marketplace(out: Path) -> None:
+    """Generate .agents/plugins/marketplace.json for the Codex subtree."""
+    catalog = {
+        "name": MARKETPLACE_NAME,
+        "interface": {"displayName": CODEX_MARKETPLACE_DISPLAY_NAME},
+        "plugins": [
+            {
+                "name": PLUGIN_NAME,
+                "source": {"source": "local", "path": CODEX_PLUGIN_SOURCE},
+                "description": CODEX_PLUGIN_DESCRIPTION,
+            }
+        ],
+    }
+    dest = out / ".agents" / "plugins" / "marketplace.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(catalog, indent=2) + "\n")
 
@@ -253,8 +443,16 @@ def assemble(out: Path, owner_repo: str, source_ref: str) -> None:
     render_template("readme.md", out / "README.md", tokens)
     copy_repo_file("LICENSE", out)
     copy_repo_file("CITATION.cff", out)
+
+    # Claude subtree.
     write_marketplace(out, owner_repo)
     copy_plugin(out)
+    strip_skill_frontmatter(out / "claude" / "plugins" / PLUGIN_NAME, CLAUDE_SKILL_KEYS)
+
+    # Codex subtree.
+    write_codex_marketplace(out)
+    copy_codex_plugin(out)
+    strip_skill_frontmatter(out / "codex" / "plugins" / PLUGIN_NAME, CODEX_SKILL_KEYS)
 
 
 def main(argv: list[str] | None = None) -> int:
