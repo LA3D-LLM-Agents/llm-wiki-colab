@@ -24,6 +24,27 @@ The plugin's SessionStart and PostToolUse hooks are trust-gated on Codex: they a
 `codex exec` has no review flow, so a headless Codex session gets the plugin's skills but none of its hooks, and therefore no session-start wiki orientation.
 Codex updates are keyed on the plugin's manifest version, not on the commit, so a release only reaches Codex users when that version is bumped.
 
+## Update
+
+### Claude Code
+
+```
+claude plugin marketplace update llm-wiki-colab
+claude plugin update llm-wiki@llm-wiki-colab
+```
+
+Pass the full `llm-wiki@llm-wiki-colab` form; `update` does not resolve the bare plugin name.
+A restart applies the update.
+
+### Codex
+
+```
+codex plugin marketplace upgrade
+codex plugin add llm-wiki@llm-wiki-colab
+```
+
+There is no plugin-level update command; re-running `add` after the marketplace upgrade replaces the install at the new version.
+
 ## Uninstall
 
 ### Claude Code

@@ -45,6 +45,8 @@ Every publish commit records the version, the source ref, and the versions of th
 `main` will eventually carry per-platform subtrees: `claude/`, `codex/`, `cursor/`, and an `antigravity/` tree.
 Antigravity has no marketplace concept of its own, so its tree is installed by local path rather than through a catalog.
 Each platform's catalog points only at its own subtree, and each platform gets a native manifest emitted for it.
+The isolation between subtrees is structural, not conventional: each harness copies only the directory its own catalog references into its install cache, and Codex's manifest fallback chains operate per directory, so a fallback cannot jump between subtrees.
+See [manifest-resolution.md](manifest-resolution.md) for the resolution details.
 
 The Claude and Codex emitters both exist as of this build; Cursor and Antigravity do not.
 The two emitters are deliberately near-duplicates.
@@ -75,3 +77,7 @@ In practice that means every publish needs a version bump, including a documenta
 
 The marketplace name `llm-wiki-colab` and the plugin name `llm-wiki` are the install identity for existing users.
 Neither name may change.
+
+The names must also stay identical across every harness catalog, not merely stable over time.
+Cursor imports Claude-installed plugins by default and deduplicates on a `marketplaceName/pluginName` key, so identical names collapse a dual-harness user's install to a single copy (static analysis, Cursor 3.12.30).
+Renaming either name per harness breaks that key: the user gets two same-named skill sets and both copies' hooks fire.

@@ -52,6 +52,10 @@ Argument substitution survives the move, so `/wiki-ask <agent> "<question>"` sti
 Codex has no command component at all and silently drops any command using `$ARGUMENTS` during its install-time migration, so a command-shaped `wiki-ask` would vanish for Codex consumers with no error at publish time.
 Shipping skills is what makes one source tree serve both harnesses.
 
+The invocation surface still differs per harness.
+Claude exposes each skill flat as `/wiki-init`; Codex namespaces it under the plugin name as `llm-wiki:wiki-init`, invoked `@llm-wiki:wiki-init` (probed, codex-cli 0.147.0).
+Text that names the slash form, such as the SessionStart guidance and the wiki templates, is Claude-native wording that a Codex model receives verbatim and must translate.
+
 ## Hook behavior on Codex
 
 Probed on codex-cli 0.147.0 against the emitted tree, with plugin hooks force-trusted by `--dangerously-bypass-hook-trust`.
