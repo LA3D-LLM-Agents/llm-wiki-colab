@@ -47,7 +47,8 @@ Antigravity has no marketplace concept of its own, so its tree is installed by l
 Each platform's catalog points only at its own subtree, and each platform gets a native manifest emitted for it.
 
 The Claude and Codex emitters both exist as of this build; Cursor and Antigravity do not.
-The two emitters are deliberately near-duplicates. Generalizing across them is deferred until the shared abstraction can be extracted from concrete instances rather than guessed at.
+The two emitters are deliberately near-duplicates.
+Most of each emitter is platform-specific behavior with no counterpart in the other, so generalizing across them is deferred until a third emitter forces the shared shape.
 
 ## Publishing policy
 
