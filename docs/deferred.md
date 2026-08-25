@@ -7,10 +7,14 @@ Items move out of this file when they land or when a decision retires them.
 
 - Make every assembled skill self-contained: no shared `core/` directory in build output.
   The source tree keeps one shared `core/`, and the emitter materializes each skill's dependencies (scripts, templates, referenced agent docs) into that skill's own directory, accepting duplication across skills in the generated tree.
-  Skill bodies then reference `scripts/...` by relative path from the skill root, which is Cursor's documented skill idiom and resolves on every harness because the model knows where it read the SKILL.md.
   Applied uniformly to all three subtrees so skill bodies stay identical across harnesses.
   Consequences: the `preToolUse` plugin-root export hook can likely be retired along with all `${CLAUDE_PLUGIN_ROOT}` references in skill bodies, and `wiki-doctor` becomes trivially self-locating.
   Hook scripts are unaffected; they resolve their plugin root through hooks.json expansion and can carry their own copies of any templates they need.
+  How bodies reference the materialized scripts, probed on cursor-agent 2026.08.11 with a local plugin whose skill shipped its own `scripts/`:
+  a bare relative `scripts/foo.sh` is not first-try reliable; in 2 of 2 runs the model was given the SKILL.md's absolute path yet ran from the workspace (one 127) or explored first, converging only by setting the shell working directory to the skill root afterwards.
+  A `$SKILL_DIRECTORY/scripts/foo.sh` placeholder in the fenced command worked in live testing: nothing sets that variable anywhere, so the model must substitute the skill directory it was given, and a model that runs it literally gets an empty expansion and a loud exit 127 rather than a silent wrong path.
+  The placeholder is the leading candidate; it drops the Claude-side `${CLAUDE_PLUGIN_ROOT}` determinism in exchange for one byte-identical mechanism on every harness.
+  Before committing all skills to it, probe whether Codex's namespaced skill loading also exposes the SKILL.md path to the model.
 - Wire the community `cursor/plugin-template` validator (`validate-template.mjs`) as an env-gated confirmation in the test suite, never as a hard gate.
   Its known defects (line-based frontmatter parsing, object-form `source` rejected, command frontmatter required though the runtime treats it as optional) would otherwise shape the emitter around a third party's bugs.
 
