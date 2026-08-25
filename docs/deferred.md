@@ -10,11 +10,13 @@ Items move out of this file when they land or when a decision retires them.
   Applied uniformly to all three subtrees so skill bodies stay identical across harnesses.
   Consequences: the `preToolUse` plugin-root export hook can likely be retired along with all `${CLAUDE_PLUGIN_ROOT}` references in skill bodies, and `wiki-doctor` becomes trivially self-locating.
   Hook scripts are unaffected; they resolve their plugin root through hooks.json expansion and can carry their own copies of any templates they need.
-  How bodies reference the materialized scripts, probed on cursor-agent 2026.08.11 with a local plugin whose skill shipped its own `scripts/`:
-  a bare relative `scripts/foo.sh` is not first-try reliable; in 2 of 2 runs the model was given the SKILL.md's absolute path yet ran from the workspace (one 127) or explored first, converging only by setting the shell working directory to the skill root afterwards.
-  A `$SKILL_DIRECTORY/scripts/foo.sh` placeholder in the fenced command worked in live testing: nothing sets that variable anywhere, so the model must substitute the skill directory it was given, and a model that runs it literally gets an empty expansion and a loud exit 127 rather than a silent wrong path.
-  The placeholder is the leading candidate; it drops the Claude-side `${CLAUDE_PLUGIN_ROOT}` determinism in exchange for one byte-identical mechanism on every harness.
-  Before committing all skills to it, probe whether Codex's namespaced skill loading also exposes the SKILL.md path to the model.
+  How each harness resolves a skill body's file references, established by probing and source inspection:
+  Claude Code sets `CLAUDE_SKILL_DIR` in the shell that runs a skill's commands, holding that skill's own directory, so `${CLAUDE_SKILL_DIR}/scripts/foo.sh` expands deterministically there.
+  Codex instructs the model to resolve relative references such as `scripts/foo.py` against the containing SKILL.md; this is model behavior, not textual expansion by the loader (codex-rs/ext/skills/src/catalog_prompt.rs:25).
+  Cursor gives the model the SKILL.md's absolute path but nothing enforces combining it (cursor-agent 2026.08.11): a bare relative `scripts/foo.sh` failed first-try in 2 of 2 probe runs, and real-looking `${VAR}` spellings were submitted literally first (exit 127, then recovered).
+  An unset-looking `$SKILL_DIRECTORY/scripts/foo.sh` placeholder worked in live testing: the model substitutes the skill directory it was given, and a literal run fails loudly on the empty expansion rather than running a silent wrong path.
+  Settled: emit `${CLAUDE_SKILL_DIR}` in the Claude subtree and rewrite it to the `$SKILL_DIRECTORY` placeholder in the Codex and Cursor subtrees.
+  `wiki-doctor.sh` stays unchanged by this migration; its self-location fallback and `core/agents/` gate check mean the doctor's files keep their `core/` layout in the output.
 - Wire the community `cursor/plugin-template` validator (`validate-template.mjs`) as an env-gated confirmation in the test suite, never as a hard gate.
   Its known defects (line-based frontmatter parsing, object-form `source` rejected, command frontmatter required though the runtime treats it as optional) would otherwise shape the emitter around a third party's bugs.
 
