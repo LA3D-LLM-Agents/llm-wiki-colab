@@ -33,6 +33,9 @@ Do not build the distribution layout on the fallbacks; emit a native manifest fo
 The silent-wins behavior is why the Codex emitter deletes `.claude-plugin/` from the Codex subtree.
 If the Claude manifest rode along, `.codex-plugin/plugin.json` would win today, but any future path that consulted the stale Claude copy would diverge without a warning.
 
+The Cursor emitter deletes `.claude-plugin/` from its subtree for the same reason.
+Codex's plugin chain ends at `.cursor-plugin/plugin.json`, so the Cursor subtree is reachable by a fallback too, and a Claude manifest left beside the Cursor one is the same stale second copy.
+
 The native manifests also carry fields only their own harness can express.
 Codex requires a semver `version`, which is its entire install-cache key, and reads `interface.displayName` from the catalog.
 Claude carries the marketplace `owner` block and resolves versions from commit SHAs.

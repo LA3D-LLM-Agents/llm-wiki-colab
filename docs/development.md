@@ -6,14 +6,21 @@ devenv.sh provisions the stable tools used for local work: `jq`, `shellcheck`, a
 devenv is a convenience, not a contract.
 Every build, test, and publish script is a plain script runnable with those tools on PATH, and nothing in the repository may require the devenv shell.
 
-Platform CLIs (`claude`, and later `codex` and `cursor`) are installed at their current release, outside the devenv lock.
+Platform CLIs (`claude`, `codex`, and `cursor-agent`) are installed at their current release, outside the devenv lock.
 They are the subject under test, so they must match what users actually run rather than a pinned version.
+`cursor-agent` must be 2026.08.11 or newer: earlier versions do not run a plugin's own session-start hook, so the Cursor subtree cannot be exercised against them at all.
 
 ## Build and test discipline
 
 Always build to a scratch directory and test or install the built artifact from there.
 Never point a plugin host at the source tree.
 Claude's `--plugin-dir` flag can bypass this and load the source tree directly; that is fine as a deliberate, occasional act, but it is not the supported development loop.
+
+Cursor loads a local plugin from `~/.cursor/plugins/local/<name>/`.
+Copy the built subtree there; do not link it.
+Cursor silently ignores symlinks inside an installed plugin, so a linked tree installs as a plugin whose files are all missing.
+The skill namespace is flat, so a local copy and a real install of the same plugin collide and both sets of hooks fire.
+`tests/test_cursor_manifests.sh` carries a live check of this loop, gated behind `LLM_WIKI_CURSOR_SMOKE=1` because it writes into `~/.cursor/plugins/local/` and spends a model call.
 
 ## Script language conventions
 

@@ -71,6 +71,46 @@ A shell write reports `tool_name` as `Bash`, the same spelling Claude uses, not 
 
 None of this changes the trust gate: without the bypass flag, plugin hooks on Codex are discovered and silently skipped, and `codex exec` has no approval flow.
 
+## Hook behavior on Cursor
+
+Probed on cursor-agent 2026.08.11 against the emitted tree, installed by copy into `~/.cursor/plugins/local/`.
+
+A plugin-shipped `sessionStart` hook fires in the CLI and its `additional_context` reaches the model's context.
+That is the whole delivery mechanism for Cursor, and it sets the minimum supported version: 2026.08.11.
+The hook is fire-and-forget, so nothing it does can block or delay session creation, and a failure costs orientation rather than the session.
+
+Cursor's hooks file is a different dialect, not a variant of Claude's.
+Event names are lowercase, each event holds a flat list of hook definitions rather than matcher groups, and the file carries a schema `version`.
+The emitter therefore writes the Cursor file outright instead of deriving it from the Claude one, and the single `sessionStart` entry runs an adapter, `hooks/cursor-session-start.sh`, rather than the shared hook directly.
+The adapter exports `CLAUDE_PLUGIN_ROOT`, runs `ensure-wiki.py` and `session-start.sh` in the order Claude's manifest wires them, and translates `hookSpecificOutput.additionalContext` into `additional_context`.
+The `systemMessage` banner has no Cursor counterpart and is dropped; the user-visible banner stays a Claude affordance.
+
+Two facts force the adapter to exist rather than the hook being wired directly.
+`${CURSOR_PLUGIN_ROOT}` expands in a hooks.json command string and nowhere else, and Cursor exports no plugin-root variable, so the adapter is handed its own root as `argv[1]`.
+The hook process starts with its working directory at the plugin root rather than the workspace, while `session-start.sh` decides whether a repo has opted in by testing `.llm-wiki` against `$PWD`, so the adapter changes directory first: `CURSOR_PROJECT_DIR`, then the payload's `workspace_roots[0]`, then the inherited working directory.
+
+`disable-model-invocation` in a skill's frontmatter causes Cursor to suppress that skill entirely: it is not listed and cannot be invoked by anyone, including the user.
+The key is therefore stripped from the Cursor subtree, which makes `wiki-init`, `wiki-doctor`, `wiki-ask`, and `wiki-enroll` model-invocable there.
+That is the same trade Codex already makes, for a different reason: Codex ignores the key, Cursor honors it by deleting the skill.
+
+Skill bodies get a second rewrite that no other subtree gets.
+`${CLAUDE_PLUGIN_ROOT}` is not expanded in a skill body, and no plugin-root variable exists in the shell the agent runs a body's commands in, so a body that shells out through the variable fails with exit 127.
+The install path is keyed on a content hash and is unknown at build time, so it cannot be baked in either.
+The Cursor bodies name the directory in prose instead: every occurrence becomes `<plugin_root>`, and a paragraph after the frontmatter defines it as the directory two levels above the SKILL.md file, for the model to substitute.
+`core/scripts/wiki-doctor.sh` falls back to its own location for the same reason.
+
+The skill namespace is flat, as Claude's is: a skill appears as `wiki-init`, not namespaced under the plugin.
+Two installed plugins shipping the same skill names collide.
+
+`postToolUse` is not wired on Cursor.
+`hooks/posttooluse.sh` ships in the subtree as a byte-identical shared file but nothing invokes it, so the verification-gate advisory is not delivered there.
+
+Cloud agents get no `sessionStart` at all.
+Cursor's own documentation lists the hook as unavailable there, on the grounds that a cloud session would fire it after the first write rather than at true session start.
+A cloud agent therefore gets the plugin's skills and no wiki orientation.
+
+Cursor silently ignores symlinks inside an installed plugin, which is why every emitted subtree contains real files only and the build asserts that.
+
 ## Open verification items
 
 - A repo with the GitHub Wiki feature disabled (not merely empty) should fail cleanly to the create-first-page path and never attach the main repo. Unconfirmed.

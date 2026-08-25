@@ -48,9 +48,10 @@ Each platform's catalog points only at its own subtree, and each platform gets a
 The isolation between subtrees is structural, not conventional: each harness copies only the directory its own catalog references into its install cache, and Codex's manifest fallback chains operate per directory, so a fallback cannot jump between subtrees.
 See [manifest-resolution.md](manifest-resolution.md) for the resolution details.
 
-The Claude and Codex emitters both exist as of this build; Cursor and Antigravity do not.
-The two emitters are deliberately near-duplicates.
-Most of each emitter is platform-specific behavior with no counterpart in the other, so generalizing across them is deferred until a third emitter forces the shared shape.
+The Claude, Codex, and Cursor emitters all exist as of this build; Antigravity does not.
+The three emitters are deliberately near-duplicates.
+Most of each emitter is platform-specific behavior with no counterpart in the others, and generalizing was deferred until a third emitter made the shared shape visible.
+That third emitter now exists, so extracting the shared shape from the three concrete emitters is the next step.
 
 ## Publishing policy
 

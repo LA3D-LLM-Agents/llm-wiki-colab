@@ -24,6 +24,16 @@ The plugin's SessionStart and PostToolUse hooks are trust-gated on Codex: they a
 `codex exec` has no review flow, so a headless Codex session gets the plugin's skills but none of its hooks, and therefore no session-start wiki orientation.
 Codex updates are keyed on the plugin's manifest version, not on the commit, so a release only reaches Codex users when that version is bumped.
 
+### Cursor
+
+```
+cursor-agent plugin marketplace add https://github.com/{{owner_repo}}
+```
+
+Requires cursor-agent 2026.08.11 or newer; earlier versions do not run a plugin's own session-start hook, so the wiki orientation never arrives.
+The marketplace source must be a git URL: Cursor accepts `owner/repo#branch` and silently resolves the default branch instead, so use the plain https URL and no branch ref.
+Installing the plugin itself is interactive: run `/plugins` in the agent and pick `llm-wiki` from `llm-wiki-colab`.
+
 ## Update
 
 ### Claude Code
@@ -44,6 +54,11 @@ codex plugin add llm-wiki@llm-wiki-colab
 ```
 
 There is no plugin-level update command; re-running `add` after the marketplace upgrade replaces the install at the new version.
+
+### Cursor
+
+Updates require the Cursor GitHub App installed on this repository, with Auto Refresh enabled for the marketplace.
+Without it an install stays pinned to the commit it was added at and never sees a new release.
 
 ## Uninstall
 
