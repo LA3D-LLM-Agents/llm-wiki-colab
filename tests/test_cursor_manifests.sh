@@ -214,4 +214,67 @@ rm -rf "$d"
 # description and the catalog's plugin blurb, both legitimate in-spec edits,
 # leaves all 59 assertions green.
 
+# ---------------------------------------------------------------------------
+# Smoke: the emitted tree installs into a real cursor-agent and its sessionStart
+# hook reaches the model. Double-gated, unlike the Codex smoke. Codex renders
+# its model-visible prompt locally into a throwaway CODEX_HOME; Cursor offers no
+# equivalent, so this writes into the user's real ~/.cursor/plugins/local and
+# spends a model call. Both are things a plain `tests/run.sh` must not do
+# unasked, hence LLM_WIKI_CURSOR_SMOKE=1.
+# Minimum cursor-agent is 2026.08.11: earlier builds do not run plugin-shipped
+# sessionStart hooks at all.
+# ---------------------------------------------------------------------------
+if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 2>&1; then
+    LOCAL_PLUGINS="$HOME/.cursor/plugins/local"
+    SMOKE_DIR="$LOCAL_PLUGINS/llmwiki-smoke"
+    STASH_DIR="$LOCAL_PLUGINS/.llmwiki-smoke-stash"
+    # A token that exists nowhere but the fabricated wiki index, so quoting it
+    # back cannot come from training, the workspace, or the prompt.
+    MARKER="LLMWIKI-SMOKE-A7F3C1"
+
+    SMOKE_FIX="$(mk_scratch https://github.com/foo/smokerepo.git)"
+    mkdir -p "$SMOKE_FIX/.llm-wiki"
+    git -C "$SMOKE_FIX/.llm-wiki" init -q
+    printf '# Index\n\n## Pages\n- [[%s]] - the only page in this wiki\n' "$MARKER" \
+        >"$SMOKE_FIX/.llm-wiki/index_smokerepo.md"
+    printf '# Log\n\n## [2026-08-25] seeded\nSeeded for the smoke.\n' \
+        >"$SMOKE_FIX/.llm-wiki/log_smokerepo.md"
+
+    smoke_cleanup() {
+        rm -rf "$SMOKE_DIR"
+        [ -d "$STASH_DIR" ] && mv "$STASH_DIR" "$LOCAL_PLUGINS/llm-wiki"
+        rm -rf "$SMOKE_FIX"
+    }
+    trap smoke_cleanup EXIT INT TERM
+
+    # Cursor's skill namespace is flat, so a real llm-wiki install alongside the
+    # smoke copy would put two same-named skill sets in front of the model and
+    # fire both plugins' hooks. Move it out of the way and put it back.
+    [ -d "$LOCAL_PLUGINS/llm-wiki" ] && mv "$LOCAL_PLUGINS/llm-wiki" "$STASH_DIR"
+
+    # Copy, never link: Cursor silently ignores symlinks inside an installed
+    # plugin, so a linked tree installs as a plugin with no files in it.
+    mkdir -p "$SMOKE_DIR"
+    cp -R "$CURSOR_PLUGIN_ROOT/." "$SMOKE_DIR/"
+
+    SMOKE_PROMPT='Answer in exactly two lines and nothing else. Line 1: "SKILLS:" followed by the names of every skill available to you whose name starts with wiki, comma separated, or NONE. Line 2: "MARKER:" followed by the exact token in your context that starts with LLMWIKI-SMOKE-, or NONE. Do not use any tools.'
+    SMOKE_OUT="$(cursor-agent -p --trust --workspace "$SMOKE_FIX" "$SMOKE_PROMPT" 2>&1)"
+
+    # Load proof first. If the plugin did not install at all, the marker
+    # assertion below would fail too and say nothing about why.
+    assert_contains "$SMOKE_OUT" "wiki-doctor" \
+        "cursor-agent lists a wiki skill from the installed plugin"
+    assert_contains "$SMOKE_OUT" "wiki-init" \
+        "cursor-agent lists wiki-init, which carries disable-model-invocation at the source"
+    # The marker exists only in the fabricated index the sessionStart hook read,
+    # so quoting it back means additional_context reached the model.
+    assert_contains "$SMOKE_OUT" "$MARKER" \
+        "sessionStart additional_context reached the model (marker quoted back)"
+
+    smoke_cleanup
+    trap - EXIT INT TERM
+else
+    echo "  skip  cursor smoke install (needs LLM_WIKI_CURSOR_SMOKE=1 and cursor-agent on PATH)"
+fi
+
 exit "$ASSERT_FAIL"
