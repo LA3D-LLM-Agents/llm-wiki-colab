@@ -13,7 +13,6 @@ for f in \
     core/Edge-Types.md.template \
     core/agents/verification-gate.md \
     core/agents/discipline-gates.md \
-    core/scripts/wiki-reciprocity.py \
     core/templates/guidance.md \
     hooks/ensure-wiki.py \
     hooks/session-start.sh \
@@ -28,6 +27,7 @@ for f in \
     skills/wiki-enroll/SKILL.md \
     skills/wiki-enroll/scripts/enroll.sh \
     skills/wiki-lint/SKILL.md \
+    skills/wiki-lint/scripts/wiki-reciprocity.py \
     skills/wiki-source/SKILL.md \
     skills/wiki-experiment/SKILL.md; do
     assert_file "$PLUGIN_ROOT/$f" "plugin ships $f"

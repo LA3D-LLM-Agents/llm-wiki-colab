@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Ported: wiki-reciprocity.py against a fixture wiki with one known one-way link.
-# Tested code (core/scripts/wiki-reciprocity.py) and the fixtures are ported
+# Tested code (skills/wiki-lint/scripts/wiki-reciprocity.py) and the fixtures are ported
 # verbatim from upstream; only this assertion glue is in the plugin's style.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/lib/assert.sh"
 require_env PLUGIN_ROOT
 
-SCRIPT="$PLUGIN_ROOT/core/scripts/wiki-reciprocity.py"
+SCRIPT="$PLUGIN_ROOT/skills/wiki-lint/scripts/wiki-reciprocity.py"
 FIX="$HERE/fixtures/reciprocity-wiki"
 tmp="$(mktemp -d)"
 
