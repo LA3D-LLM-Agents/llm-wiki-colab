@@ -314,8 +314,8 @@ rm -rf "$d"
 # hook reaches the model. Double-gated, unlike the Codex smoke. Codex renders
 # its model-visible prompt locally into a throwaway CODEX_HOME; Cursor offers no
 # equivalent, so this writes into the user's real ~/.cursor/plugins/local and
-# spends a model call. Both are things a plain `tests/run.sh` must not do
-# unasked, hence LLM_WIKI_CURSOR_SMOKE=1.
+# spends two model calls, one per delivery mechanism. Both are things a plain
+# `tests/run.sh` must not do unasked, hence LLM_WIKI_CURSOR_SMOKE=1.
 # Minimum cursor-agent is 2026.08.11: earlier builds do not run plugin-shipped
 # sessionStart hooks at all.
 # ---------------------------------------------------------------------------
@@ -365,6 +365,75 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
     # so quoting it back means additional_context reached the model.
     assert_contains "$SMOKE_OUT" "$MARKER" \
         "sessionStart additional_context reached the model (marker quoted back)"
+
+    # --- the preToolUse export, end to end ---------------------------------
+    # The assertions above prove sessionStart reaches the model. This one proves
+    # the plugin root reaches the shell the model runs a skill's commands in,
+    # which is a different process and a different mechanism.
+    #
+    # wiki-doctor is the probe because its body runs
+    # bash "${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh" and the script
+    # reports where it resolved its root from. The prompt forbids substituting
+    # the variable: left to itself the model helpfully rewrites it to a literal
+    # path or a ${VAR:-fallback}, which would make the run pass whether or not
+    # the export arrived.
+    #
+    # --force is not optional. With --trust alone every shell call in a headless
+    # session comes back `rejected` with an empty reason, including a bare cat.
+    DOCTOR_PROMPT='Use the wiki-doctor skill. Run the command in its body exactly as written, character for character, with no substitutions, no fallbacks and no extra environment assignments. Then report the script output verbatim.'
+    # stdout only: the trace has to stay parseable JSONL for jq.
+    DOCTOR_TRACE="$(cursor-agent -p --trust --force --workspace "$SMOKE_FIX" \
+        --output-format stream-json "$DOCTOR_PROMPT" 2>/dev/null)"
+    # `success` and `failure` are two shapes of the same record; taking both
+    # means a 127 arrives as a reported exit code and a message rather than as
+    # an empty variable that fails every assertion for no stated reason.
+    DOCTOR_CALL="$(printf '%s' "$DOCTOR_TRACE" \
+        | jq -c 'select(.type == "tool_call" and .subtype == "completed")
+                 | .tool_call.shellToolCall.result
+                 | (.success // .failure)
+                 | select(. != null) | select(.command | contains("wiki-doctor"))' \
+          2>/dev/null | head -1)"
+    DOCTOR_CMD="$(printf '%s' "$DOCTOR_CALL" | jq -r '.command // ""' 2>/dev/null)"
+    DOCTOR_RC="$(printf '%s' "$DOCTOR_CALL" | jq -r '.exitCode // "MISSING"' 2>/dev/null)"
+    DOCTOR_STDOUT="$(printf '%s' "$DOCTOR_CALL" | jq -r '.stdout // ""' 2>/dev/null)"
+    DOCTOR_BOTH="$(printf '%s' "$DOCTOR_CALL" | jq -r '(.stdout // "") + (.stderr // "")' 2>/dev/null)"
+
+    # The command as the agent submitted it. A successful shell call is recorded
+    # pre-rewrite, so the export prefix itself is not visible here (it shows up
+    # only in a `rejected` record, which reports what would have run). What is
+    # visible is stronger anyway: the variable reaches the shell unexpanded, so
+    # the run below can only work if something set it.
+    assert_contains "$DOCTOR_CMD" '${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh' \
+        "the agent ran the skill body's command with the variable unexpanded"
+    assert_not_contains "$DOCTOR_CMD" 'CLAUDE_PLUGIN_ROOT=' \
+        "the agent set no plugin root of its own in the command"
+
+    # Without the export this is exit 127 on bash "/core/scripts/wiki-doctor.sh".
+    [ "$DOCTOR_RC" = "0" ] \
+        && _pass "wiki-doctor exited 0 in the agent's shell" \
+        || _fail "wiki-doctor exited $DOCTOR_RC in the agent's shell (127 = the plugin root never arrived)"
+    # stderr as well as stdout: an unresolved root reports itself as
+    # `bash: /core/scripts/wiki-doctor.sh: No such file or directory`, on stderr.
+    assert_not_contains "$DOCTOR_BOTH" "No such file" \
+        "wiki-doctor's output carries no missing-file error"
+    assert_contains "$DOCTOR_STDOUT" "llm-wiki doctor" \
+        "wiki-doctor really executed (its banner is in the shell output)"
+    assert_contains "$DOCTOR_STDOUT" "structural failures: 0" \
+        "wiki-doctor passed cleanly against the installed cursor plugin"
+    # The decisive line. wiki-doctor falls back to its own location when the
+    # variable is unset and says so, so "from CLAUDE_PLUGIN_ROOT" means the
+    # preToolUse rewrite put it in that shell's environment.
+    assert_contains "$DOCTOR_STDOUT" "from CLAUDE_PLUGIN_ROOT" \
+        "wiki-doctor resolved its root from the exported variable, not its own location"
+
+    # Watched red against a live cursor-agent, not by inspection: the same run
+    # with the preToolUse entry removed from the installed hooks.json and
+    # nothing else changed came back
+    #   exitCode 127
+    #   bash: /core/scripts/wiki-doctor.sh: No such file or directory
+    # which reddens the exit-code, No-such-file, banner, structural-failures and
+    # from-CLAUDE_PLUGIN_ROOT assertions together. The command the agent
+    # submitted was byte-identical in both runs, so the difference is the hook.
 
     smoke_cleanup
     trap - EXIT INT TERM
