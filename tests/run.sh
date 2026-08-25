@@ -39,7 +39,8 @@ echo ""
 MARKETPLACE_TREE="$OUT"
 PLUGIN_ROOT="$OUT/claude/plugins/llm-wiki"
 CODEX_PLUGIN_ROOT="$OUT/codex/plugins/llm-wiki"
-export MARKETPLACE_TREE PLUGIN_ROOT CODEX_PLUGIN_ROOT
+CURSOR_PLUGIN_ROOT="$OUT/cursor/plugins/llm-wiki"
+export MARKETPLACE_TREE PLUGIN_ROOT CODEX_PLUGIN_ROOT CURSOR_PLUGIN_ROOT
 
 if [ ! -d "$PLUGIN_ROOT" ]; then
     echo "########## build output has no $PLUGIN_ROOT ##########"
