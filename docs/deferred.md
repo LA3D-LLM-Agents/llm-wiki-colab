@@ -11,10 +11,6 @@ Items move out of this file when they land or when a decision retires them.
   Applied uniformly to all three subtrees so skill bodies stay identical across harnesses.
   Consequences: the `preToolUse` plugin-root export hook can likely be retired along with all `${CLAUDE_PLUGIN_ROOT}` references in skill bodies, and `wiki-doctor` becomes trivially self-locating.
   Hook scripts are unaffected; they resolve their plugin root through hooks.json expansion and can carry their own copies of any templates they need.
-- Extract the shared emitter spine across the Claude, Codex, and Cursor blocks in `build/assemble.py`.
-  The shape they agree on is narrow: copy tree, prune foreign manifest dirs, write native manifest, per-harness transforms, strip frontmatter.
-  The catalog writers stay concrete because their schemas share nothing.
-  The extraction commit must produce byte-identical assembled output, proven with `diff -r` against a pre-change build.
 - Wire the community `cursor/plugin-template` validator (`validate-template.mjs`) as an env-gated confirmation in the test suite, never as a hard gate.
   Its known defects (line-based frontmatter parsing, object-form `source` rejected, command frontmatter required though the runtime treats it as optional) would otherwise shape the emitter around a third party's bugs.
 

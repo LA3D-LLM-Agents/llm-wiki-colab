@@ -49,9 +49,9 @@ The isolation between subtrees is structural, not conventional: each harness cop
 See [manifest-resolution.md](manifest-resolution.md) for the resolution details.
 
 The Claude, Codex, and Cursor emitters all exist as of this build; Antigravity does not.
-The three emitters are deliberately near-duplicates.
-Most of each emitter is platform-specific behavior with no counterpart in the others, and generalizing was deferred until a third emitter made the shared shape visible.
-That third emitter now exists, so extracting the shared shape from the three concrete emitters is the next step.
+The three emitters share one spine, `emit_plugin_subtree` in `build/assemble.py`: copy the plugin tree, prune the foreign manifest dir, write the native manifest, apply the harness's hook transforms, strip skill frontmatter to that harness's keys.
+Each harness parameterizes the spine with its manifest writer and hook transforms; the catalog writers stay concrete because their schemas share nothing.
+The extraction was proven byte-identical against a pre-change build, comparing both content and permission bits, because a content diff alone cannot see a dropped executable bit on the Cursor adapters.
 
 ## Publishing policy
 

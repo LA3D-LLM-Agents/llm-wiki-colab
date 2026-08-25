@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -260,14 +261,44 @@ def plugin_ignore(root: Path):
     return ignore
 
 
-def copy_plugin(out: Path) -> None:
-    """Copy plugins/llm-wiki into the Claude subtree, minus excluded paths."""
+def emit_plugin_subtree(
+    out: Path,
+    harness: str,
+    version: str,
+    *,
+    write_native_manifest: Callable[[Path, str], None],
+    skill_keys: set[str],
+    keep_claude_manifest: bool = False,
+    transform_hooks: Callable[[Path], None] | None = None,
+) -> None:
+    """Emit one harness's plugin subtree.
+
+    The shared spine of the three emitters: copy the plugin tree, prune the
+    foreign manifest dir, write the native manifest, apply the harness's hook
+    transforms, strip skill frontmatter to the keys that harness reads.
+
+    The copied .claude-plugin/ is pruned wherever it is not the native
+    manifest: Codex's and Cursor's undocumented fallback chains can resolve a
+    stale Claude manifest riding along, which is exactly the silent-divergence
+    trap the pruning closes.
+    """
     src = (REPO_ROOT / "plugins" / PLUGIN_NAME).resolve()
     if not src.is_dir():
         raise AssembleError(f"missing plugin source: {src}")
-    dest = out / "claude" / "plugins" / PLUGIN_NAME
+    dest = out / harness / "plugins" / PLUGIN_NAME
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dest, ignore=plugin_ignore(src))
+    if not keep_claude_manifest:
+        claude_manifest_dir = dest / ".claude-plugin"
+        if not claude_manifest_dir.is_dir():
+            raise AssembleError(
+                f"expected {claude_manifest_dir} in the copied plugin tree"
+            )
+        shutil.rmtree(claude_manifest_dir)
+    write_native_manifest(dest, version)
+    if transform_hooks is not None:
+        transform_hooks(dest)
+    strip_skill_frontmatter(dest, skill_keys)
 
 
 def rewrite_skill_frontmatter(path: Path, allowed: set[str]) -> None:
@@ -407,31 +438,6 @@ def write_codex_hooks(plugin_dir: Path) -> None:
     dest.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def copy_codex_plugin(out: Path, version: str) -> None:
-    """Copy plugins/llm-wiki into the Codex subtree, minus excluded paths.
-
-    Deliberately a near-copy of copy_plugin. Two concrete emitters come first;
-    the shared abstraction is extracted from them, not designed ahead of them.
-    """
-    src = (REPO_ROOT / "plugins" / PLUGIN_NAME).resolve()
-    if not src.is_dir():
-        raise AssembleError(f"missing plugin source: {src}")
-    dest = out / "codex" / "plugins" / PLUGIN_NAME
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(src, dest, ignore=plugin_ignore(src))
-    # Claude's manifest must not ride along: Codex resolves .codex-plugin first
-    # but falls back to .claude-plugin, and a stale second manifest is exactly
-    # the silent-divergence trap that fallback creates.
-    claude_manifest_dir = dest / ".claude-plugin"
-    if not claude_manifest_dir.is_dir():
-        raise AssembleError(
-            f"expected {claude_manifest_dir} in the copied plugin tree"
-        )
-    shutil.rmtree(claude_manifest_dir)
-    write_codex_plugin_manifest(dest, version)
-    write_codex_hooks(dest)
-
-
 def write_codex_plugin_manifest(plugin_dir: Path, version: str) -> None:
     """Generate .codex-plugin/plugin.json for the Codex subtree."""
     manifest = {
@@ -528,29 +534,6 @@ def write_cursor_hooks(plugin_dir: Path) -> None:
         adapter.chmod(0o755)
 
 
-def copy_cursor_plugin(out: Path, version: str) -> None:
-    """Copy plugins/llm-wiki into the Cursor subtree, minus excluded paths.
-
-    A third deliberate near-copy. The shared abstraction is extracted from the
-    concrete emitters once they exist, not designed ahead of them.
-    """
-    src = (REPO_ROOT / "plugins" / PLUGIN_NAME).resolve()
-    if not src.is_dir():
-        raise AssembleError(f"missing plugin source: {src}")
-    dest = out / "cursor" / "plugins" / PLUGIN_NAME
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(src, dest, ignore=plugin_ignore(src))
-    # Same reason as the Codex subtree: Codex's plugin fallback chain ends at
-    # .cursor-plugin, so a Claude manifest riding along here is a second stale
-    # manifest that a future resolution path could silently prefer.
-    claude_manifest_dir = dest / ".claude-plugin"
-    if not claude_manifest_dir.is_dir():
-        raise AssembleError(f"expected {claude_manifest_dir} in the copied plugin tree")
-    shutil.rmtree(claude_manifest_dir)
-    write_cursor_plugin_manifest(dest, version)
-    write_cursor_hooks(dest)
-
-
 def write_cursor_plugin_manifest(plugin_dir: Path, version: str) -> None:
     """Generate .cursor-plugin/plugin.json for the Cursor subtree.
 
@@ -642,21 +625,38 @@ def assemble(out: Path, owner_repo: str, source_ref: str, version: str) -> None:
     # whether a publish carries a bump.
     (out / VERSION_FILE).write_text(version + "\n", encoding="utf-8")
 
-    # Claude subtree.
+    # Claude subtree. The native manifest is the copied one, stamped.
     write_marketplace(out, owner_repo)
-    copy_plugin(out)
-    stamp_claude_plugin_manifest(out / "claude" / "plugins" / PLUGIN_NAME, version)
-    strip_skill_frontmatter(out / "claude" / "plugins" / PLUGIN_NAME, CLAUDE_SKILL_KEYS)
+    emit_plugin_subtree(
+        out,
+        "claude",
+        version,
+        write_native_manifest=stamp_claude_plugin_manifest,
+        skill_keys=CLAUDE_SKILL_KEYS,
+        keep_claude_manifest=True,
+    )
 
     # Codex subtree.
     write_codex_marketplace(out)
-    copy_codex_plugin(out, version)
-    strip_skill_frontmatter(out / "codex" / "plugins" / PLUGIN_NAME, CODEX_SKILL_KEYS)
+    emit_plugin_subtree(
+        out,
+        "codex",
+        version,
+        write_native_manifest=write_codex_plugin_manifest,
+        skill_keys=CODEX_SKILL_KEYS,
+        transform_hooks=write_codex_hooks,
+    )
 
     # Cursor subtree.
     write_cursor_marketplace(out, owner_repo)
-    copy_cursor_plugin(out, version)
-    strip_skill_frontmatter(out / "cursor" / "plugins" / PLUGIN_NAME, CURSOR_SKILL_KEYS)
+    emit_plugin_subtree(
+        out,
+        "cursor",
+        version,
+        write_native_manifest=write_cursor_plugin_manifest,
+        skill_keys=CURSOR_SKILL_KEYS,
+        transform_hooks=write_cursor_hooks,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
