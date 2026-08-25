@@ -9,10 +9,10 @@
 set -uo pipefail
 
 # Where the plugin lives. Claude Code exports CLAUDE_PLUGIN_ROOT into the shell
-# that runs a skill's commands; Cursor exports nothing the agent's shell can
-# see, so the fallback is the script's own location. Two levels up from
-# core/scripts/ is the plugin root, which is the same directory the Cursor skill
-# bodies tell the model to substitute.
+# that runs a skill's commands, and on Cursor the plugin's preToolUse hook
+# exports it onto the command. The fallback is the script's own location, two
+# levels up from core/scripts/, which keeps the doctor able to report on an
+# install where neither of those happened.
 PR="${CLAUDE_PLUGIN_ROOT:-}"
 PR_SRC="CLAUDE_PLUGIN_ROOT"
 if [ -z "$PR" ]; then
