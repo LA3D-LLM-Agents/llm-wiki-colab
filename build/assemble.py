@@ -27,7 +27,7 @@ TEMPLATE_DIR = SCRIPT_DIR / "templates"
 MARKETPLACE_NAME = "llm-wiki-colab"
 PLUGIN_NAME = "llm-wiki"
 MARKETPLACE_DESCRIPTION = (
-    "LLM-wiki durable-memory plugins (Claude Code adapter; more platforms to follow)."
+    "LLM-wiki durable-memory plugins for Claude Code, Codex, and Cursor."
 )
 PLUGIN_DESCRIPTION = (
     "Opt-in per-repo llm-wiki memory for Claude Code: SessionStart orientation "
@@ -41,6 +41,13 @@ CODEX_PLUGIN_DESCRIPTION = (
     "Opt-in per-repo llm-wiki memory for Codex: SessionStart orientation "
     "(index + last-5 log), verification-gate advisory, wiki-write-protocol push, "
     "and a knowledge-graph build."
+)
+CURSOR_PLUGIN_SOURCE = "./cursor/plugins/llm-wiki"
+# No verification-gate advisory in the list: Cursor's hooks file wires
+# sessionStart only, so posttooluse.sh ships but is never invoked there.
+CURSOR_PLUGIN_DESCRIPTION = (
+    "Opt-in per-repo llm-wiki memory for Cursor: sessionStart orientation "
+    "(index + last-5 log), wiki-write-protocol push, and a knowledge-graph build."
 )
 VERSION_FILE = Path("VERSION")
 # Relative to a plugin directory, not to the repo root: after phase 4 the only
@@ -76,10 +83,17 @@ CLAUDE_ONLY_SKILL_KEYS = {
 # `metadata` must carry a mapping value: codex silently drops a skill whose
 # metadata is a scalar from the model-visible prompt (probed, codex-cli 0.147.0).
 CODEX_ONLY_SKILL_KEYS = {"metadata"}
+# Cursor owns no key of its own, and universal-only routing is the point rather
+# than an accident: a skill whose frontmatter carries disable-model-invocation
+# is suppressed outright on Cursor, neither listed nor invocable by anyone
+# (probed by mutation, cursor-agent 2026.08.11 — stripping the key from one
+# installed skill made exactly that skill appear).
+CURSOR_ONLY_SKILL_KEYS: set[str] = set()
 
 CLAUDE_SKILL_KEYS = UNIVERSAL_SKILL_KEYS | CLAUDE_ONLY_SKILL_KEYS
 CODEX_SKILL_KEYS = UNIVERSAL_SKILL_KEYS | CODEX_ONLY_SKILL_KEYS
-KNOWN_SKILL_KEYS = CLAUDE_SKILL_KEYS | CODEX_SKILL_KEYS
+CURSOR_SKILL_KEYS = UNIVERSAL_SKILL_KEYS | CURSOR_ONLY_SKILL_KEYS
+KNOWN_SKILL_KEYS = CLAUDE_SKILL_KEYS | CODEX_SKILL_KEYS | CURSOR_SKILL_KEYS
 
 FRONTMATTER_KEY_RE = re.compile(r"^([A-Za-z0-9_-]+):")
 
@@ -283,7 +297,8 @@ def rewrite_skill_frontmatter(path: Path, allowed: set[str]) -> None:
             if key not in KNOWN_SKILL_KEYS:
                 raise AssembleError(
                     f"{path}: unknown skill frontmatter key {key!r}; add it to "
-                    "CLAUDE_ONLY_SKILL_KEYS or CODEX_ONLY_SKILL_KEYS"
+                    "CLAUDE_ONLY_SKILL_KEYS, CODEX_ONLY_SKILL_KEYS, or "
+                    "CURSOR_ONLY_SKILL_KEYS"
                 )
             seen.add(key)
             keeping = key in allowed
@@ -451,6 +466,181 @@ def write_codex_marketplace(out: Path) -> None:
     dest.write_text(json.dumps(catalog, indent=2) + "\n")
 
 
+# Cursor's own hooks dialect: lowercase event names, one flat list of hook
+# definitions per event, and a schema `version`. ${CURSOR_PLUGIN_ROOT} is
+# expanded textually here and nowhere else in the tree, and Cursor exports no
+# plugin-root variable, so the adapter is handed its own root as an argument.
+CURSOR_HOOKS = {
+    "version": 1,
+    "hooks": {
+        "sessionStart": [
+            {
+                "type": "command",
+                "command": (
+                    'bash "${CURSOR_PLUGIN_ROOT}/hooks/cursor-session-start.sh" '
+                    '"${CURSOR_PLUGIN_ROOT}"'
+                ),
+            }
+        ]
+    },
+}
+CURSOR_ADAPTER_TEMPLATE = "cursor-session-start.sh"
+CURSOR_ADAPTER_REL = Path("hooks/cursor-session-start.sh")
+
+
+def write_cursor_hooks(plugin_dir: Path) -> None:
+    """Replace the copied hooks.json with Cursor's dialect, and ship the adapter.
+
+    Unlike the Codex file this is not derived from the Claude one: no field of
+    the Claude dialect survives translation, and the one event Cursor delivers
+    for this plugin reaches the shared session-start.sh through an adapter
+    rather than directly. posttooluse.sh is left in the tree unwired; Cursor's
+    postToolUse advisory is not delivered.
+    """
+    dest = plugin_dir / "hooks" / "hooks.json"
+    if not dest.is_file():
+        raise AssembleError(f"expected {dest} in the copied plugin tree")
+    dest.write_text(json.dumps(CURSOR_HOOKS, indent=2) + "\n")
+
+    src = TEMPLATE_DIR / CURSOR_ADAPTER_TEMPLATE
+    if not src.is_file():
+        raise AssembleError(f"missing template: {src}")
+    adapter = plugin_dir / CURSOR_ADAPTER_REL
+    shutil.copyfile(src, adapter)
+    adapter.chmod(0o755)
+
+
+PLUGIN_ROOT_VARIABLE = "${CLAUDE_PLUGIN_ROOT}"
+CURSOR_PLUGIN_ROOT_TOKEN = "<plugin_root>"
+CURSOR_PLUGIN_ROOT_NOTE = (
+    "In this file, `<plugin_root>` means this plugin's installation directory: "
+    "the directory two levels above this SKILL.md file. Substitute its absolute "
+    "path before running any command below."
+)
+
+
+def rewrite_cursor_skill_body(path: Path) -> bool:
+    """Give a skill body a plugin root it can actually resolve on Cursor.
+
+    Cursor expands ${CURSOR_PLUGIN_ROOT} in hooks.json command strings only, and
+    exports no plugin-root variable into the shell the agent runs commands in,
+    so a body that shells out through a variable fails with exit 127 (probed,
+    cursor-agent 2026.08.11). The install path is SHA-keyed and unknown at build
+    time, so the body names the directory in prose and the model substitutes it.
+
+    Deny by default, like the frontmatter router: any surviving reference to the
+    variable is a hard error rather than a body that ships broken. Frontmatter
+    is left untouched, and a skill with no reference is not rewritten at all.
+    """
+    text = path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        raise AssembleError(f"{path}: SKILL.md does not open with a --- fence")
+    try:
+        close = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    except StopIteration:
+        raise AssembleError(f"{path}: SKILL.md frontmatter is not closed") from None
+
+    body = "\n".join(lines[close + 1 :])
+    if PLUGIN_ROOT_VARIABLE not in body:
+        return False
+    body = body.replace(PLUGIN_ROOT_VARIABLE, CURSOR_PLUGIN_ROOT_TOKEN)
+    if "CLAUDE_PLUGIN_ROOT" in body:
+        raise AssembleError(
+            f"{path}: a CLAUDE_PLUGIN_ROOT reference survives the cursor body "
+            f"rewrite; only the {PLUGIN_ROOT_VARIABLE} spelling is recognized"
+        )
+    path.write_text(
+        "\n".join(
+            [
+                *lines[: close + 1],
+                "",
+                CURSOR_PLUGIN_ROOT_NOTE,
+                "",
+                body.lstrip("\n"),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return True
+
+
+def rewrite_cursor_skill_bodies(plugin_dir: Path) -> None:
+    """Apply the plugin-root body rewrite to every SKILL.md under a subtree."""
+    for skill in sorted(plugin_dir.glob("skills/*/SKILL.md")):
+        rewrite_cursor_skill_body(skill)
+
+
+def copy_cursor_plugin(out: Path, version: str) -> None:
+    """Copy plugins/llm-wiki into the Cursor subtree, minus excluded paths.
+
+    A third deliberate near-copy. The shared abstraction is extracted from the
+    concrete emitters once they exist, not designed ahead of them.
+    """
+    src = (REPO_ROOT / "plugins" / PLUGIN_NAME).resolve()
+    if not src.is_dir():
+        raise AssembleError(f"missing plugin source: {src}")
+    dest = out / "cursor" / "plugins" / PLUGIN_NAME
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dest, ignore=plugin_ignore(src))
+    # Same reason as the Codex subtree: Codex's plugin fallback chain ends at
+    # .cursor-plugin, so a Claude manifest riding along here is a second stale
+    # manifest that a future resolution path could silently prefer.
+    claude_manifest_dir = dest / ".claude-plugin"
+    if not claude_manifest_dir.is_dir():
+        raise AssembleError(f"expected {claude_manifest_dir} in the copied plugin tree")
+    shutil.rmtree(claude_manifest_dir)
+    write_cursor_plugin_manifest(dest, version)
+    write_cursor_hooks(dest)
+
+
+def write_cursor_plugin_manifest(plugin_dir: Path, version: str) -> None:
+    """Generate .cursor-plugin/plugin.json for the Cursor subtree.
+
+    Cursor reads no version, but stamping it keeps one number describing one
+    build across all three subtrees.
+    """
+    manifest = {
+        "name": PLUGIN_NAME,
+        "version": version,
+        "description": CURSOR_PLUGIN_DESCRIPTION,
+        "author": {
+            "name": "LA3D-LLM-Agents",
+            "url": "https://github.com/LA3D-LLM-Agents",
+        },
+    }
+    dest = plugin_dir / ".cursor-plugin" / "plugin.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(manifest, indent=2) + "\n")
+
+
+def write_cursor_marketplace(out: Path, owner_repo: str) -> None:
+    """Generate .cursor-plugin/marketplace.json for the Cursor subtree.
+
+    Cursor nests the catalog description under `metadata`, as Claude does, and
+    carries the same `owner` block. The two names are deliberately identical to
+    the Claude catalog's: Cursor imports Claude-installed plugins and dedupes on
+    marketplaceName/pluginName, so any per-harness rename gives a dual-harness
+    user two copies whose hooks both fire.
+    """
+    owner = owner_repo.split("/", 1)[0]
+    catalog = {
+        "name": MARKETPLACE_NAME,
+        "owner": {"name": owner, "url": f"https://github.com/{owner}"},
+        "metadata": {"description": MARKETPLACE_DESCRIPTION},
+        "plugins": [
+            {
+                "name": PLUGIN_NAME,
+                "source": CURSOR_PLUGIN_SOURCE,
+                "description": CURSOR_PLUGIN_DESCRIPTION,
+            }
+        ],
+    }
+    dest = out / ".cursor-plugin" / "marketplace.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(catalog, indent=2) + "\n")
+
+
 def scan_for_tokens(out: Path) -> list[str]:
     """Report every surviving {{token}} in the emitted tree as 'path: {{token}}'."""
     findings: list[str] = []
@@ -505,6 +695,14 @@ def assemble(out: Path, owner_repo: str, source_ref: str, version: str) -> None:
     write_codex_marketplace(out)
     copy_codex_plugin(out, version)
     strip_skill_frontmatter(out / "codex" / "plugins" / PLUGIN_NAME, CODEX_SKILL_KEYS)
+
+    # Cursor subtree.
+    write_cursor_marketplace(out, owner_repo)
+    copy_cursor_plugin(out, version)
+    strip_skill_frontmatter(out / "cursor" / "plugins" / PLUGIN_NAME, CURSOR_SKILL_KEYS)
+    # Cursor only: the other two harnesses export a plugin-root variable their
+    # skill bodies can use, so their bodies ship verbatim.
+    rewrite_cursor_skill_bodies(out / "cursor" / "plugins" / PLUGIN_NAME)
 
 
 def main(argv: list[str] | None = None) -> int:
