@@ -468,8 +468,8 @@ def write_codex_marketplace(out: Path) -> None:
 
 # Cursor's own hooks dialect: lowercase event names, one flat list of hook
 # definitions per event, and a schema `version`. ${CURSOR_PLUGIN_ROOT} is
-# expanded textually here and nowhere else in the tree, and Cursor exports no
-# plugin-root variable, so the adapter is handed its own root as an argument.
+# expanded textually here and nowhere else in the tree, so both adapters are
+# handed their own root as an argument.
 CURSOR_HOOKS = {
     "version": 1,
     "hooks": {
@@ -481,20 +481,37 @@ CURSOR_HOOKS = {
                     '"${CURSOR_PLUGIN_ROOT}"'
                 ),
             }
-        ]
+        ],
+        "preToolUse": [
+            {
+                "type": "command",
+                "matcher": "Shell",
+                "command": (
+                    'bash "${CURSOR_PLUGIN_ROOT}/hooks/cursor-pre-tool-use.sh" '
+                    '"${CURSOR_PLUGIN_ROOT}"'
+                ),
+            }
+        ],
     },
 }
-CURSOR_ADAPTER_TEMPLATE = "cursor-session-start.sh"
-CURSOR_ADAPTER_REL = Path("hooks/cursor-session-start.sh")
+# template name -> path inside the plugin, for the scripts Cursor's hooks.json
+# points at. Both are installed 0755: a non-executable hook script is the
+# classic silent-no-hook failure.
+CURSOR_ADAPTERS = {
+    "cursor-session-start.sh": Path("hooks/cursor-session-start.sh"),
+    "cursor-pre-tool-use.sh": Path("hooks/cursor-pre-tool-use.sh"),
+}
 
 
 def write_cursor_hooks(plugin_dir: Path) -> None:
-    """Replace the copied hooks.json with Cursor's dialect, and ship the adapter.
+    """Replace the copied hooks.json with Cursor's dialect, and ship the adapters.
 
     Unlike the Codex file this is not derived from the Claude one: no field of
     the Claude dialect survives translation, and the one event Cursor delivers
     for this plugin reaches the shared session-start.sh through an adapter
-    rather than directly. posttooluse.sh is left in the tree unwired; Cursor's
+    rather than directly. The preToolUse entry has no Claude counterpart at all:
+    it exists to put CLAUDE_PLUGIN_ROOT into the shell the agent runs skill
+    commands in. posttooluse.sh is left in the tree unwired; Cursor's
     postToolUse advisory is not delivered.
     """
     dest = plugin_dir / "hooks" / "hooks.json"
@@ -502,73 +519,13 @@ def write_cursor_hooks(plugin_dir: Path) -> None:
         raise AssembleError(f"expected {dest} in the copied plugin tree")
     dest.write_text(json.dumps(CURSOR_HOOKS, indent=2) + "\n")
 
-    src = TEMPLATE_DIR / CURSOR_ADAPTER_TEMPLATE
-    if not src.is_file():
-        raise AssembleError(f"missing template: {src}")
-    adapter = plugin_dir / CURSOR_ADAPTER_REL
-    shutil.copyfile(src, adapter)
-    adapter.chmod(0o755)
-
-
-PLUGIN_ROOT_VARIABLE = "${CLAUDE_PLUGIN_ROOT}"
-CURSOR_PLUGIN_ROOT_TOKEN = "<plugin_root>"
-CURSOR_PLUGIN_ROOT_NOTE = (
-    "In this file, `<plugin_root>` means this plugin's installation directory: "
-    "the directory two levels above this SKILL.md file. Substitute its absolute "
-    "path before running any command below."
-)
-
-
-def rewrite_cursor_skill_body(path: Path) -> bool:
-    """Give a skill body a plugin root it can actually resolve on Cursor.
-
-    Cursor expands ${CURSOR_PLUGIN_ROOT} in hooks.json command strings only, and
-    exports no plugin-root variable into the shell the agent runs commands in,
-    so a body that shells out through a variable fails with exit 127 (probed,
-    cursor-agent 2026.08.11). The install path is SHA-keyed and unknown at build
-    time, so the body names the directory in prose and the model substitutes it.
-
-    Deny by default, like the frontmatter router: any surviving reference to the
-    variable is a hard error rather than a body that ships broken. Frontmatter
-    is left untouched, and a skill with no reference is not rewritten at all.
-    """
-    text = path.read_text(encoding="utf-8")
-    lines = text.split("\n")
-    if not lines or lines[0].strip() != "---":
-        raise AssembleError(f"{path}: SKILL.md does not open with a --- fence")
-    try:
-        close = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
-    except StopIteration:
-        raise AssembleError(f"{path}: SKILL.md frontmatter is not closed") from None
-
-    body = "\n".join(lines[close + 1 :])
-    if PLUGIN_ROOT_VARIABLE not in body:
-        return False
-    body = body.replace(PLUGIN_ROOT_VARIABLE, CURSOR_PLUGIN_ROOT_TOKEN)
-    if "CLAUDE_PLUGIN_ROOT" in body:
-        raise AssembleError(
-            f"{path}: a CLAUDE_PLUGIN_ROOT reference survives the cursor body "
-            f"rewrite; only the {PLUGIN_ROOT_VARIABLE} spelling is recognized"
-        )
-    path.write_text(
-        "\n".join(
-            [
-                *lines[: close + 1],
-                "",
-                CURSOR_PLUGIN_ROOT_NOTE,
-                "",
-                body.lstrip("\n"),
-            ]
-        ),
-        encoding="utf-8",
-    )
-    return True
-
-
-def rewrite_cursor_skill_bodies(plugin_dir: Path) -> None:
-    """Apply the plugin-root body rewrite to every SKILL.md under a subtree."""
-    for skill in sorted(plugin_dir.glob("skills/*/SKILL.md")):
-        rewrite_cursor_skill_body(skill)
+    for template, rel in CURSOR_ADAPTERS.items():
+        src = TEMPLATE_DIR / template
+        if not src.is_file():
+            raise AssembleError(f"missing template: {src}")
+        adapter = plugin_dir / rel
+        shutil.copyfile(src, adapter)
+        adapter.chmod(0o755)
 
 
 def copy_cursor_plugin(out: Path, version: str) -> None:
@@ -700,9 +657,6 @@ def assemble(out: Path, owner_repo: str, source_ref: str, version: str) -> None:
     write_cursor_marketplace(out, owner_repo)
     copy_cursor_plugin(out, version)
     strip_skill_frontmatter(out / "cursor" / "plugins" / PLUGIN_NAME, CURSOR_SKILL_KEYS)
-    # Cursor only: the other two harnesses export a plugin-root variable their
-    # skill bodies can use, so their bodies ship verbatim.
-    rewrite_cursor_skill_bodies(out / "cursor" / "plugins" / PLUGIN_NAME)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # L1: the built Cursor subtree carries native manifests, the same install
 # identity as the other two subtrees, hooks rewritten into Cursor's dialect and
-# pointed at the adapter, and the two skill rewrites Cursor's behavior forces
-# (frontmatter routing, and a plugin root a skill body can actually resolve).
+# pointed at both adapters, the frontmatter routing Cursor's behavior forces,
+# and skill bodies that are byte-identical to the Claude subtree's.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/lib/assert.sh"
@@ -12,6 +12,10 @@ CURSOR_CATALOG="$MARKETPLACE_TREE/.cursor-plugin/marketplace.json"
 CURSOR_MANIFEST="$CURSOR_PLUGIN_ROOT/.cursor-plugin/plugin.json"
 CURSOR_HOOKS="$CURSOR_PLUGIN_ROOT/hooks/hooks.json"
 CURSOR_ADAPTER="$CURSOR_PLUGIN_ROOT/hooks/cursor-session-start.sh"
+CURSOR_PRETOOL="$CURSOR_PLUGIN_ROOT/hooks/cursor-pre-tool-use.sh"
+
+# Everything below the closing frontmatter fence of a SKILL.md.
+skill_body() { awk 'f; /^---$/ && ++c == 2 { f = 1 }' "$1"; }
 
 for j in "$CURSOR_CATALOG" "$CURSOR_MANIFEST" "$CURSOR_HOOKS"; do
     rel="${j#"$MARKETPLACE_TREE"/}"
@@ -109,14 +113,93 @@ assert_not_contains "$(cat "$CURSOR_HOOKS" 2>/dev/null)" "SessionStart" \
 assert_not_contains "$(cat "$CURSOR_HOOKS" 2>/dev/null)" "CLAUDE_PLUGIN_ROOT" \
     "cursor hooks.json carries no \${CLAUDE_PLUGIN_ROOT} reference"
 
-# The adapter itself. Cursor runs the command through bash, but a non-executable
-# hook script is the classic silent-no-hook failure, so the mode is asserted.
+# preToolUse, matched to Shell. This is the only channel that reaches the shell
+# the agent runs a skill's commands in: sessionStart's `env` propagates to later
+# hook processes and not to that shell, so without this entry every skill body
+# that shells out through ${CLAUDE_PLUGIN_ROOT} fails with exit 127.
+[ "$(jq -r '.hooks.preToolUse | length' "$CURSOR_HOOKS" 2>/dev/null)" = "1" ] \
+    && _pass "cursor hooks.json declares exactly one preToolUse hook" \
+    || _fail "cursor hooks.json does not declare exactly one preToolUse hook"
+[ "$(jq -r '.hooks.preToolUse[0].type // "MISSING"' "$CURSOR_HOOKS" 2>/dev/null)" = "command" ] \
+    && _pass "cursor preToolUse hook is type command" \
+    || _fail "cursor preToolUse hook is not type command"
+# Unmatched, the hook would fire for Read, Write, Grep, Task and every MCP tool
+# and rewrite input it has no business touching.
+[ "$(jq -r '.hooks.preToolUse[0].matcher // "MISSING"' "$CURSOR_HOOKS" 2>/dev/null)" = "Shell" ] \
+    && _pass "cursor preToolUse hook is matched to Shell" \
+    || _fail "cursor preToolUse hook is not matched to Shell"
+PRETOOL_CMD="$(jq -r '.hooks.preToolUse[0].command // ""' "$CURSOR_HOOKS" 2>/dev/null)"
+assert_contains "$PRETOOL_CMD" '${CURSOR_PLUGIN_ROOT}' \
+    "cursor preToolUse command expands \${CURSOR_PLUGIN_ROOT}"
+assert_contains "$PRETOOL_CMD" "hooks/cursor-pre-tool-use.sh" \
+    "cursor preToolUse command runs the pre-tool-use adapter"
+PRETOOL_ROOT_REFS="$(printf '%s' "$PRETOOL_CMD" | grep -o 'CURSOR_PLUGIN_ROOT' | wc -l | tr -d ' ')"
+[ "$PRETOOL_ROOT_REFS" = "2" ] \
+    && _pass "cursor preToolUse command passes the plugin root as argv[1] too" \
+    || _fail "cursor preToolUse command names CURSOR_PLUGIN_ROOT $PRETOOL_ROOT_REFS times, expected 2"
+
+# The adapters themselves. Cursor runs the command through bash, but a
+# non-executable hook script is the classic silent-no-hook failure, so the mode
+# is asserted.
 assert_file "$CURSOR_ADAPTER" "cursor subtree ships hooks/cursor-session-start.sh"
 if [ -x "$CURSOR_ADAPTER" ]; then
     _pass "cursor adapter is executable"
 else
     _fail "cursor adapter is not executable"
 fi
+assert_file "$CURSOR_PRETOOL" "cursor subtree ships hooks/cursor-pre-tool-use.sh"
+if [ -x "$CURSOR_PRETOOL" ]; then
+    _pass "cursor pre-tool-use adapter is executable"
+else
+    _fail "cursor pre-tool-use adapter is not executable"
+fi
+
+# --- the pre-tool-use adapter, driven directly ------------------------------
+# A fabricated preToolUse payload through the emitted script, so the rewrite is
+# checked against the file that ships rather than against the template.
+PRETOOL_IN='{"tool_name":"Shell","tool_input":{"command":"bash \"${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh\"","working_directory":"/project"},"tool_use_id":"t1","hook_event_name":"preToolUse"}'
+PRETOOL_OUT="$(printf '%s' "$PRETOOL_IN" | bash "$CURSOR_PRETOOL" "$CURSOR_PLUGIN_ROOT" 2>/dev/null)"
+[ "$(printf '%s' "$PRETOOL_OUT" | jq -r '.permission // "MISSING"' 2>/dev/null)" = "allow" ] \
+    && _pass "pre-tool-use adapter allows a Shell command" \
+    || _fail "pre-tool-use adapter does not allow a Shell command"
+REWRITTEN_CMD="$(printf '%s' "$PRETOOL_OUT" | jq -r '.updated_input.command // ""' 2>/dev/null)"
+# Anchored: the export has to come first, or the original command has already
+# run by the time the variable exists.
+assert_contains "$REWRITTEN_CMD" "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash" \
+    "rewritten command exports the real plugin root before the original command"
+[ "$REWRITTEN_CMD" = "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash \"\${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh\"" ] \
+    && _pass "rewritten command preserves the original command byte-for-byte after the prefix" \
+    || _fail "rewritten command mangled the original command: $REWRITTEN_CMD"
+# tool_input is replaced wholesale, not merged, so a dropped field is a lost
+# working directory rather than a visible error.
+[ "$(printf '%s' "$PRETOOL_OUT" | jq -r '.updated_input.working_directory // "MISSING"' 2>/dev/null)" = "/project" ] \
+    && _pass "pre-tool-use adapter carries other tool_input fields through unchanged" \
+    || _fail "pre-tool-use adapter dropped tool_input.working_directory"
+
+# A non-Shell tool must pass through untouched. The payload carries a `command`
+# of its own on purpose: an MCP tool taking a command parameter is the case that
+# distinguishes a real tool_name guard from an adapter that rewrites whatever
+# looks like a command, and a shell prefix injected into an MCP call is not a
+# no-op there.
+PRETOOL_READ="$(printf '%s' '{"tool_name":"MCP:deploy","tool_input":{"command":"deploy prod"},"hook_event_name":"preToolUse"}' \
+    | bash "$CURSOR_PRETOOL" "$CURSOR_PLUGIN_ROOT" 2>/dev/null)"
+[ "$(printf '%s' "$PRETOOL_READ" | jq -r '.permission // "MISSING"' 2>/dev/null)" = "allow" ] \
+    && _pass "pre-tool-use adapter allows a non-Shell tool" \
+    || _fail "pre-tool-use adapter does not allow a non-Shell tool"
+[ "$(printf '%s' "$PRETOOL_READ" | jq -r 'has("updated_input")' 2>/dev/null)" = "false" ] \
+    && _pass "pre-tool-use adapter emits no updated_input for a non-Shell tool" \
+    || _fail "pre-tool-use adapter rewrote the input of a non-Shell tool"
+
+# Fail open, both ways. An unparseable payload and a missing plugin root are the
+# two failure modes that would otherwise wedge every shell command in a session.
+PRETOOL_JUNK="$(printf 'not json at all' | bash "$CURSOR_PRETOOL" "$CURSOR_PLUGIN_ROOT" 2>/dev/null)"
+[ "$(printf '%s' "$PRETOOL_JUNK" | jq -r '.permission // "MISSING"' 2>/dev/null)" = "allow" ] \
+    && _pass "pre-tool-use adapter fails open on an unparseable payload" \
+    || _fail "pre-tool-use adapter does not fail open on an unparseable payload"
+printf '%s' "$PRETOOL_IN" | env -u CLAUDE_PLUGIN_ROOT -u CURSOR_PLUGIN_ROOT bash "$CURSOR_PRETOOL" >/dev/null 2>&1
+[ "$?" = "0" ] \
+    && _pass "pre-tool-use adapter exits 0 with no plugin root anywhere" \
+    || _fail "pre-tool-use adapter exits non-zero with no plugin root, which Cursor reads as a block"
 
 # --- skills ----------------------------------------------------------------
 # Structural parity of the seven skills, and the two universal frontmatter keys
@@ -146,24 +229,26 @@ CLAUDE_DMI="$(cat "$PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | grep -c 'disabl
     && _pass "claude skills carry exactly 4 disable-model-invocation lines" \
     || _fail "claude skills carry $CLAUDE_DMI disable-model-invocation lines, expected 4"
 
-# Skill bodies. Cursor expands no plugin-root variable in a body and exports
-# none into the agent's shell, so a surviving ${CLAUDE_PLUGIN_ROOT} is a command
-# that fails with exit 127. The replacement is only usable if the file also says
-# what it means, so both halves are asserted.
-CURSOR_VAR_REFS="$(grep -l 'CLAUDE_PLUGIN_ROOT' "$CURSOR_PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null)"
-assert_empty "$CURSOR_VAR_REFS" "no CLAUDE_PLUGIN_ROOT reference in any cursor skill${CURSOR_VAR_REFS:+ (found: $CURSOR_VAR_REFS)}"
-DEFINED="$(grep -l "means this plugin" "$CURSOR_PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')"
-REWRITTEN="$(grep -l '<plugin_root>' "$CURSOR_PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')"
-[ "$REWRITTEN" -gt 0 ] \
-    && _pass "$REWRITTEN cursor skills use the <plugin_root> placeholder" \
-    || _fail "no cursor skill uses the <plugin_root> placeholder"
-[ "$DEFINED" = "$REWRITTEN" ] \
-    && _pass "every rewritten cursor skill defines <plugin_root> ($DEFINED)" \
-    || _fail "$REWRITTEN cursor skills use <plugin_root> but only $DEFINED define it"
-# The Claude subtree keeps the variable: it works there, and rewriting it would
-# turn a resolved path into a substitution the model has to perform by hand.
+# Skill bodies. Frontmatter is routed per harness, but everything below the
+# closing fence is one text with one meaning, and the preToolUse hook puts
+# CLAUDE_PLUGIN_ROOT into the agent's shell so a body that shells out through
+# the variable resolves on Cursor exactly as it does on Claude. Byte identity is
+# the assertion: any per-harness wording is prose that has to be maintained
+# twice and can only drift.
+for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
+    if cmp -s <(skill_body "$CURSOR_PLUGIN_ROOT/skills/$s/SKILL.md") \
+              <(skill_body "$PLUGIN_ROOT/skills/$s/SKILL.md"); then
+        _pass "cursor skill $s body is byte-identical to the claude subtree's"
+    else
+        _fail "cursor skill $s body differs from the claude subtree's"
+    fi
+done
+# Both subtrees keep the variable: it resolves on both, and naming the directory
+# in prose instead would make the model substitute a path by hand.
 assert_grep_file "$PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_PLUGIN_ROOT}' \
     "claude skill bodies still use \${CLAUDE_PLUGIN_ROOT}"
+assert_grep_file "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_PLUGIN_ROOT}' \
+    "cursor skill bodies still use \${CLAUDE_PLUGIN_ROOT}"
 
 # --- shared runtime --------------------------------------------------------
 # One source, three emitters: every difference between subtrees is supposed to
@@ -204,15 +289,25 @@ rm -rf "$d"
 # mutated copy of the built tree, one per failure class: a period in the catalog
 # name, a renamed plugin manifest, a source pointing at claude/, the description
 # moved to the catalog root, a drifted version, a .claude-plugin riding along,
-# hooks.json left in Claude dialect, the adapter's argv[1] dropped, the adapter
-# non-executable, the adapter deleted, disable-model-invocation restored on a
-# cursor skill and stripped from the Claude ones, ${CLAUDE_PLUGIN_ROOT} put back
-# in a cursor body, the <plugin_root> definition removed, core/ and
+# hooks.json left in Claude dialect, either adapter's argv[1] dropped, an
+# adapter non-executable, an adapter deleted, disable-model-invocation restored
+# on a cursor skill and stripped from the Claude ones, core/ and
 # hooks/session-start.sh drifted, a real file replaced by a symlink, a skill
-# deleted, and the hooks schema version removed. Each reddened the assertion it
-# targets and no other. The other direction was probed too: rewording a skill
-# description and the catalog's plugin blurb, both legitimate in-spec edits,
-# leaves all 59 assertions green.
+# deleted, and the hooks schema version removed.
+# The preToolUse half was reddened the same way: the matcher dropped, the whole
+# entry deleted, the command pointed at the sessionStart script, the script
+# deleted and left non-executable, the adapter emitting the original command
+# unprefixed, appending the export after the command instead of before, dropping
+# the other tool_input fields, rewriting every tool rather than Shell only,
+# denying instead of allowing, exiting 1 with no plugin root, emitting nothing at
+# all, and the <plugin_root> body substitution put back on one skill. Each
+# reddened the assertion it targets and no other.
+# The non-Shell probe carries a `command` of its own because of one of those
+# runs: with a payload that had none, dropping the adapter's tool_name guard
+# entirely left every assertion green.
+# The other direction was probed too: rewording a skill description and the
+# catalog's plugin blurb, both legitimate in-spec edits, leaves all 80
+# assertions green.
 
 # ---------------------------------------------------------------------------
 # Smoke: the emitted tree installs into a real cursor-agent and its sessionStart
