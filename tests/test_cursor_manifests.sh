@@ -157,7 +157,7 @@ fi
 # --- the pre-tool-use adapter, driven directly ------------------------------
 # A fabricated preToolUse payload through the emitted script, so the rewrite is
 # checked against the file that ships rather than against the template.
-PRETOOL_IN='{"tool_name":"Shell","tool_input":{"command":"bash \"${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh\"","working_directory":"/project"},"tool_use_id":"t1","hook_event_name":"preToolUse"}'
+PRETOOL_IN='{"tool_name":"Shell","tool_input":{"command":"bash \"${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh\"","working_directory":"/project"},"tool_use_id":"t1","hook_event_name":"preToolUse"}'
 PRETOOL_OUT="$(printf '%s' "$PRETOOL_IN" | bash "$CURSOR_PRETOOL" "$CURSOR_PLUGIN_ROOT" 2>/dev/null)"
 [ "$(printf '%s' "$PRETOOL_OUT" | jq -r '.permission // "MISSING"' 2>/dev/null)" = "allow" ] \
     && _pass "pre-tool-use adapter allows a Shell command" \
@@ -167,7 +167,7 @@ REWRITTEN_CMD="$(printf '%s' "$PRETOOL_OUT" | jq -r '.updated_input.command // "
 # run by the time the variable exists.
 assert_contains "$REWRITTEN_CMD" "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash" \
     "rewritten command exports the real plugin root before the original command"
-[ "$REWRITTEN_CMD" = "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash \"\${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh\"" ] \
+[ "$REWRITTEN_CMD" = "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash \"\${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh\"" ] \
     && _pass "rewritten command preserves the original command byte-for-byte after the prefix" \
     || _fail "rewritten command mangled the original command: $REWRITTEN_CMD"
 # tool_input is replaced wholesale, not merged, so a dropped field is a lost
@@ -243,12 +243,11 @@ for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-e
         _fail "cursor skill $s body differs from the claude subtree's"
     fi
 done
-# Both subtrees keep the variable: it resolves on both, and naming the directory
-# in prose instead would make the model substitute a path by hand.
-assert_grep_file "$PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_PLUGIN_ROOT}' \
-    "claude skill bodies still use \${CLAUDE_PLUGIN_ROOT}"
-assert_grep_file "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_PLUGIN_ROOT}' \
-    "cursor skill bodies still use \${CLAUDE_PLUGIN_ROOT}"
+# Both emitted bodies retain the skill-local command from the shared source.
+assert_grep_file "$PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_SKILL_DIR}/scripts/wiki-doctor.sh' \
+    "claude wiki-doctor uses its skill-local script"
+assert_grep_file "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_SKILL_DIR}/scripts/wiki-doctor.sh' \
+    "cursor wiki-doctor retains the shared skill-local command"
 
 # --- shared runtime --------------------------------------------------------
 # One source, three emitters: every difference between subtrees is supposed to
@@ -279,7 +278,7 @@ assert_empty "$SYMLINKS" "no symlink anywhere in the assembled output${SYMLINKS:
 # plugin-root variable in the environment.
 d="$(mk_scratch https://github.com/foo/bar.git)"
 ( cd "$d" && bash "$CURSOR_PLUGIN_ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
-dout="$( cd "$d" && env -u CLAUDE_PLUGIN_ROOT bash "$CURSOR_PLUGIN_ROOT/core/scripts/wiki-doctor.sh" 2>&1 )"
+dout="$( cd "$d" && env -u CLAUDE_PLUGIN_ROOT bash "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/scripts/wiki-doctor.sh" 2>&1 )"
 assert_contains "$dout" "cursor dialect"        "doctor reads the emitted cursor subtree as cursor dialect"
 assert_contains "$dout" "orientation dry-run emits" "doctor's dry-run reaches orientation through the adapter"
 assert_contains "$dout" "structural failures: 0"    "emitted cursor subtree passes the doctor cleanly"
@@ -372,7 +371,7 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
     # which is a different process and a different mechanism.
     #
     # wiki-doctor is the probe because its body runs
-    # bash "${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh" and the script
+    # bash "${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh" and the script
     # reports where it resolved its root from. The prompt forbids substituting
     # the variable: left to itself the model helpfully rewrites it to a literal
     # path or a ${VAR:-fallback}, which would make the run pass whether or not
@@ -403,17 +402,17 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
     # only in a `rejected` record, which reports what would have run). What is
     # visible is stronger anyway: the variable reaches the shell unexpanded, so
     # the run below can only work if something set it.
-    assert_contains "$DOCTOR_CMD" '${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh' \
+    assert_contains "$DOCTOR_CMD" '${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh' \
         "the agent ran the skill body's command with the variable unexpanded"
     assert_not_contains "$DOCTOR_CMD" 'CLAUDE_PLUGIN_ROOT=' \
         "the agent set no plugin root of its own in the command"
 
-    # Without the export this is exit 127 on bash "/core/scripts/wiki-doctor.sh".
+    # Without the export this is exit 127 on bash "/skills/wiki-doctor/scripts/wiki-doctor.sh".
     [ "$DOCTOR_RC" = "0" ] \
         && _pass "wiki-doctor exited 0 in the agent's shell" \
         || _fail "wiki-doctor exited $DOCTOR_RC in the agent's shell (127 = the plugin root never arrived)"
     # stderr as well as stdout: an unresolved root reports itself as
-    # `bash: /core/scripts/wiki-doctor.sh: No such file or directory`, on stderr.
+    # `bash: /skills/wiki-doctor/scripts/wiki-doctor.sh: No such file or directory`, on stderr.
     assert_not_contains "$DOCTOR_BOTH" "No such file" \
         "wiki-doctor's output carries no missing-file error"
     assert_contains "$DOCTOR_STDOUT" "llm-wiki doctor" \
@@ -430,7 +429,7 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
     # with the preToolUse entry removed from the installed hooks.json and
     # nothing else changed came back
     #   exitCode 127
-    #   bash: /core/scripts/wiki-doctor.sh: No such file or directory
+    #   bash: /skills/wiki-doctor/scripts/wiki-doctor.sh: No such file or directory
     # which reddens the exit-code, No-such-file, banner, structural-failures and
     # from-CLAUDE_PLUGIN_ROOT assertions together. The command the agent
     # submitted was byte-identical in both runs, so the difference is the hook.

@@ -12,7 +12,7 @@ d="$(mk_scratch https://github.com/foo/bar.git)"
 ( cd "$d" && bash "$PLUGIN_ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
 
 run_doctor() {
-    ( cd "$d" && CLAUDE_PLUGIN_ROOT="$1" bash "$1/core/scripts/wiki-doctor.sh" 2>&1 )
+    ( cd "$d" && CLAUDE_PLUGIN_ROOT="$1" bash "$1/skills/wiki-doctor/scripts/wiki-doctor.sh" 2>&1 )
 }
 
 # --- Claude subtree --------------------------------------------------------
@@ -79,7 +79,7 @@ assert_not_contains "$bcout" "structural failures: 0" \
 # executions but not the shell the agent runs a skill's commands in, so the
 # script is invoked by absolute path with nothing exported. It has to locate
 # itself rather than report a broken install.
-nout="$( cd "$d" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN_ROOT/core/scripts/wiki-doctor.sh" 2>&1 )"
+nout="$( cd "$d" && env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN_ROOT/skills/wiki-doctor/scripts/wiki-doctor.sh" 2>&1 )"
 assert_contains "$nout" "from script location"   "unset root: falls back to its own location"
 assert_contains "$nout" "claude dialect"         "unset root: still identifies the dialect"
 assert_contains "$nout" "structural failures: 0" "unset root: no structural failures"

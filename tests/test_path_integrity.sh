@@ -13,7 +13,6 @@ for f in \
     core/Edge-Types.md.template \
     core/agents/verification-gate.md \
     core/agents/discipline-gates.md \
-    core/scripts/wiki-doctor.sh \
     core/scripts/wiki-reciprocity.py \
     core/templates/guidance.md \
     hooks/ensure-wiki.py \
@@ -23,6 +22,7 @@ for f in \
     .claude-plugin/plugin.json \
     skills/wiki-init/SKILL.md \
     skills/wiki-doctor/SKILL.md \
+    skills/wiki-doctor/scripts/wiki-doctor.sh \
     skills/wiki-ask/SKILL.md \
     skills/wiki-ask/scripts/ask.sh \
     skills/wiki-enroll/SKILL.md \

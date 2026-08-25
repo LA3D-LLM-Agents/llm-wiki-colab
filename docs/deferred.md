@@ -16,7 +16,7 @@ Items move out of this file when they land or when a decision retires them.
   Cursor gives the model the SKILL.md's absolute path but nothing enforces combining it (cursor-agent 2026.08.11): a bare relative `scripts/foo.sh` failed first-try in 2 of 2 probe runs, and real-looking `${VAR}` spellings were submitted literally first (exit 127, then recovered).
   An unset-looking `$SKILL_DIRECTORY/scripts/foo.sh` placeholder worked in live testing: the model substitutes the skill directory it was given, and a literal run fails loudly on the empty expansion rather than running a silent wrong path.
   Settled: emit `${CLAUDE_SKILL_DIR}` in the Claude subtree and rewrite it to the `$SKILL_DIRECTORY` placeholder in the Codex and Cursor subtrees.
-  `wiki-doctor.sh` stays unchanged by this migration; its self-location fallback and `core/agents/` gate check mean the doctor's files keep their `core/` layout in the output.
+  `wiki-doctor.sh` keeps its self-location fallback and `core/agents/` gate check while its script lives in the skill directory.
 - Wire the community `cursor/plugin-template` validator (`validate-template.mjs`) as an env-gated confirmation in the test suite, never as a hard gate.
   Its known defects (line-based frontmatter parsing, object-form `source` rejected, command frontmatter required though the runtime treats it as optional) would otherwise shape the emitter around a third party's bugs.
 
@@ -36,7 +36,7 @@ Items move out of this file when they land or when a decision retires them.
 
 ## Doctor retirement
 
-- Retire `/wiki-doctor`: the skill, `core/scripts/wiki-doctor.sh`, and the doctor's dialect-sniffing machinery.
+- Retire `/wiki-doctor`: the skill, `skills/wiki-doctor/scripts/wiki-doctor.sh`, and the doctor's dialect-sniffing machinery.
   The doctor is an artifact of the pre-plugin template install, where structural checks against files copied into a user's repo were genuinely user-actionable.
   Plugin installation is atomic, so invoking the skill already proves the tree it would verify, and every structural check duplicates the test suite run against the built artifact.
   Disposition of each check:

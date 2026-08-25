@@ -98,7 +98,7 @@ A second `preToolUse` entry, matched to `Shell`, puts the plugin root into the s
 It returns `updated_input` with `export CLAUDE_PLUGIN_ROOT=<root>; ` prefixed onto the command, and the rewritten command is what executes.
 Nothing else reaches that process.
 `${CLAUDE_PLUGIN_ROOT}` is not expanded in a skill body, `sessionStart`'s `env` output propagates to later hook processes in the session but not to the agent's shell, and the install path is keyed on a content hash so it cannot be baked in at build time.
-Without the hook, a body that shells out through the variable fails with exit 127 on `bash "/core/scripts/wiki-doctor.sh"`; with it, `wiki-doctor` reports its root as resolved from `CLAUDE_PLUGIN_ROOT` and exits 0 (verified against cursor-agent 2026.08.11, both directions).
+Without the hook, a body that shells out through the variable fails with exit 127 on `bash "/skills/wiki-doctor/scripts/wiki-doctor.sh"`; with it, `wiki-doctor` reports its root as resolved from `CLAUDE_PLUGIN_ROOT` and exits 0 (verified against cursor-agent 2026.08.11, both directions).
 
 Cursor skill bodies are therefore byte-identical to the Claude subtree's, and only frontmatter routes per harness.
 
@@ -106,7 +106,7 @@ The hook fires on every `Shell` call for as long as the plugin is installed, inc
 What it does to them is one variable export followed by the original command byte for byte, so the rewrite is semantically inert.
 It fails open: an unparseable payload, a non-`Shell` tool, or a missing plugin root all emit a bare `{"permission": "allow"}` and the command runs unmodified.
 It never denies and never exits 2.
-`core/scripts/wiki-doctor.sh` still falls back to its own location when the variable is unset, which keeps the doctor able to diagnose the case where the hook did not fire.
+`skills/wiki-doctor/scripts/wiki-doctor.sh` still falls back to its own location when the variable is unset, which keeps the doctor able to diagnose the case where the hook did not fire.
 
 The skill namespace is flat, as Claude's is: a skill appears as `wiki-init`, not namespaced under the plugin.
 Two installed plugins shipping the same skill names collide.
