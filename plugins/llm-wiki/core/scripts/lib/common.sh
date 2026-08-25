@@ -13,8 +13,7 @@
 # Locating this file from a consumer (use BASH_SOURCE, never $0):
 #   HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #   source "$HERE/lib/common.sh"                 # scripts/*.sh
-#   source "$HERE/../scripts/lib/common.sh"      # wiki/init-wiki.sh
-#   source "$HERE/../../../scripts/lib/common.sh"# wiki/agents/*/setup.sh
+#   source "$HERE/scripts/lib/common.sh"         # core/init-wiki.sh
 #
 
 # Idempotent: safe to source more than once (e.g. a script that also

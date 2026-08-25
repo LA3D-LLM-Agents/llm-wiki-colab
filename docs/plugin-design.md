@@ -29,7 +29,7 @@ The no-wiki case stays silent, consistent with the opt-in model.
 ## `/wiki-doctor` semantics
 
 Structural checks (plugin root, gates, hooks, `.llm-wiki/` attachment) are pass/fail.
-Missing optional KG dependencies or no network are warnings, not failures.
+No network is a warning, not a failure.
 A clean install exits 0.
 
 ## Federation

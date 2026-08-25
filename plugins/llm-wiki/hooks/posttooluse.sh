@@ -18,7 +18,7 @@
 #
 # This script does not evaluate the wiki itself (a shell hook has no way
 # to). It only reminds the agent, which has tools, to run the gate. The
-# canonical criteria live in wiki/agents/verification-gate.md.
+# canonical criteria live in core/agents/verification-gate.md.
 #
 # Reads the PostToolUse event JSON on stdin; always exits 0.
 

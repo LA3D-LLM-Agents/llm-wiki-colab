@@ -70,7 +70,7 @@ Every wiki edit ends with a commit in the wiki's own repo:
   git -C .llm-wiki add <files>
   git -C .llm-wiki commit -m "..."
 Run these without asking; local commits are reversible. Push only on explicit
-request (use the wiki-write-protocol wrapper).
+request.
 
 User-invocable skills: /wiki-init, /wiki-experiment, /wiki-source, /wiki-lint, /wiki-doctor.
 </system-reminder>

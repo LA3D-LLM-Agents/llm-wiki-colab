@@ -32,8 +32,7 @@ Defer to `.llm-wiki/SCHEMA_<repo>.md` for the precise conventions. This skill is
 4. Report findings to the user grouped by check type, with one or two example pages per finding.
 5. Ask which findings to fix in this pass. Lint is incremental; not every issue needs to be addressed at once.
 6. For accepted fixes, apply them with cross-reference repair in both directions, update `index_<repo>.md` as needed, and append a `## [YYYY-MM-DD] lint | Subject` entry to `log_<repo>.md` describing what was cleaned up. The first bullet of that entry is the attribution line `- by: <name> via claude-code`, where `<name>` is the output of `git config user.name` in the wiki repo (read it, do not invent it). See "Log Entry Attribution" in `SCHEMA_<repo>.md`.
-7. Optionally rebuild the knowledge graph: `${CLAUDE_PLUGIN_ROOT}/core/scripts/kg/build-graph.sh`.
-8. Commit in the wiki's own git repo in two steps: first stage and commit the lint fixes and index changes by name, then stage and commit the `log_<repo>.md` entry on its own. One commit per log entry keeps `git blame` on the log a faithful per-entry record (see "Log Entry Attribution" in SCHEMA). Do not push unless asked. **When pushing, follow the procedure at `${CLAUDE_PLUGIN_ROOT}/core/agents/wiki-write-protocol.md`** rather than plain `git push`.
+7. Commit in the wiki's own git repo in two steps: first stage and commit the lint fixes and index changes by name, then stage and commit the `log_<repo>.md` entry on its own. One commit per log entry keeps `git blame` on the log a faithful per-entry record (see "Log Entry Attribution" in SCHEMA). Do not push unless asked.
 
 ## When to run
 

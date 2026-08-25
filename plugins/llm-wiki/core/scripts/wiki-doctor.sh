@@ -52,7 +52,7 @@ fi
 
 # 2. Gate files shipped.
 missing=""
-for g in verification-gate discipline-gates wiki-write-protocol; do
+for g in verification-gate discipline-gates; do
     [ -f "$PR/core/agents/$g.md" ] || missing="$missing $g"
 done
 [ -z "$missing" ] && ok "gate files present (core/agents/)" || bad "missing gate file(s):$missing"
@@ -91,18 +91,7 @@ else
     bad ".llm-wiki/ absent or not a git repo — run /wiki-init to attach"
 fi
 
-# 5. KG deps (optional).
-if python3 -c "import rdflib, pyshacl, yaml" >/dev/null 2>&1; then
-    if [ -x "$PR/core/scripts/kg/build-graph.sh" ]; then
-        ok "KG deps present; build-graph.sh executable"
-    else
-        warn "KG deps present but build-graph.sh is not executable"
-    fi
-else
-    warn "KG deps (rdflib/pyshacl/pyyaml) not importable — KG build unavailable (optional)"
-fi
-
-# 6. Remote reachable + push-ready (no real push; wiki_push has no dry-run).
+# 5. Remote reachable + push-ready (no real push).
 if [ -d .llm-wiki ]; then
     if git -C .llm-wiki ls-remote >/dev/null 2>&1; then
         if [ -z "$(git -C .llm-wiki status --porcelain 2>/dev/null)" ]; then

@@ -32,6 +32,20 @@ Items move out of this file when they land or when a decision retires them.
 - Until the self-contained-skill restructure lands, skill references to shared `core/` files sit outside the skill root, and the `preToolUse` export is what makes the shell route to them deterministic.
   New skills should phrase script references as commands rather than read-this-file pointers.
 
+## Removed pending reimplementation
+
+Both subsystems below were removed rather than carried, because their code and documentation still targeted the ancestor template layout.
+Recover either implementation from version history; both were last present at `src` commit `6e1d4ff2`.
+
+- Reimplement the knowledge-graph pipeline (was `core/scripts/kg/`: `build-graph.sh`/`.py`, `wiki-to-jsonld.py`, 11 curated SPARQL queries) against the current layout.
+  The removed code defaulted its wiki path to the ancestor's `wiki/*.wiki/` rather than `.llm-wiki/`, and fetched ontology, shapes, and context from the LA3D GitHub Pages URL.
+  The typed-edge vocabulary survives in `core/Edge-Types.md.template` and the scaffolded SCHEMA, which still frame inverse materialisation as a KG build's job, so a reimplementation has its input contract intact.
+  `wiki-doctor` no longer checks KG dependencies; restore an optional-deps warning when the pipeline returns.
+- Reimplement the wiki-write-protocol push wrapper (was `core/scripts/wiki-write-protocol/protocol.sh` plus the ten-scenario suite under `tests/wiki-write-protocol/` and the agent procedure doc `core/agents/wiki-write-protocol.md`).
+  The wrapper provided `wiki_push` (optimistic push, fetch-merge-classify-retry on rejection, union merge for `index_*`/`log_*`, semantic-conflict deferral) and `agent_session_start` (fast-forward freshness check).
+  Skills and guidance now say plain push-only-when-asked with no collision protocol, so concurrent writers to a shared wiki can conflict at push time.
+  The union-merge `.gitattributes` the old README attributed to `init-wiki.sh` scaffolding was never actually written by it; a reimplementation should close that gap too.
+
 ## Verification gaps
 
 - A repo with the GitHub Wiki feature disabled (not merely empty) should fail cleanly to the create-first-page path and never attach the main repo.

@@ -89,8 +89,8 @@ lw_ensure_remote() {
   fi
 }
 
-# Default branch of a remote, DETECTED not hardcoded (mirrors the fix
-# already in protocol.sh). Tries the locally-known remote HEAD symref
+# Default branch of a remote, DETECTED not hardcoded.
+# Tries the locally-known remote HEAD symref
 # first, then asks the remote over the network. Empty output + nonzero
 # return when undetectable, so the caller chooses a fallback explicitly
 # instead of silently assuming main vs master.

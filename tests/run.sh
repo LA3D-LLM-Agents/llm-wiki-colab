@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Plugin test runner. Builds the artifact tree, then runs every test_*.sh and
-# the wiki-write-protocol scenario suite against that build output (never
-# against the source tree). Exit code = number of failing test files.
+# Plugin test runner. Builds the artifact tree, then runs every test_*.sh
+# against that build output (never against the source tree).
+# Exit code = number of failing test files.
 #
 # LLM_WIKI_BUILT_TREE can point at a tree to reuse. If that tree contains a
 # `.prebuilt` marker file the build step is skipped and the tree is used as-is
@@ -53,24 +53,6 @@ for t in "$HERE"/test_*.sh; do
     if bash "$t"; then :; else FAIL=$((FAIL + 1)); fi
     echo ""
 done
-
-echo "===== wiki-write-protocol scenarios ====="
-# The push-race / livelock-retry scenarios exercise concurrent-writer timing, so
-# they can flake once under load. Retry the suite once; only a repeated failure
-# is a real failure (the deterministic test_*.sh above are never retried).
-log="$(mktemp)"
-proto_ok=0
-for attempt in 1 2 3; do
-    if bash "$HERE/wiki-write-protocol/run-all.sh" >"$log" 2>&1; then proto_ok=1; break; fi
-    echo "  (attempt $attempt flaked on a timing-sensitive scenario; retrying)"
-done
-if [ "$proto_ok" -eq 1 ]; then
-    echo "  ok   $(grep -E 'Summary:' "$log" || echo 'scenarios passed')"
-else
-    echo "  FAIL protocol scenarios (3 attempts):"; tail -15 "$log"; FAIL=$((FAIL + 1))
-fi
-rm -f "$log"
-echo ""
 
 echo "########## failing test files: $FAIL ##########"
 exit "$FAIL"

@@ -31,23 +31,21 @@ MARKETPLACE_DESCRIPTION = (
 )
 PLUGIN_DESCRIPTION = (
     "Opt-in per-repo llm-wiki memory for Claude Code: SessionStart orientation "
-    "(index + last-5 log), verification-gate advisory, wiki-write-protocol push, "
-    "and a knowledge-graph build."
+    "(index + last-5 log) and a verification-gate advisory."
 )
 PLUGIN_SOURCE = "./claude/plugins/llm-wiki"
 CODEX_PLUGIN_SOURCE = "./codex/plugins/llm-wiki"
 CODEX_MARKETPLACE_DISPLAY_NAME = "LLM-wiki Colab"
 CODEX_PLUGIN_DESCRIPTION = (
     "Opt-in per-repo llm-wiki memory for Codex: SessionStart orientation "
-    "(index + last-5 log), verification-gate advisory, wiki-write-protocol push, "
-    "and a knowledge-graph build."
+    "(index + last-5 log) and a verification-gate advisory."
 )
 CURSOR_PLUGIN_SOURCE = "./cursor/plugins/llm-wiki"
 # No verification-gate advisory in the list: Cursor's hooks file wires
 # sessionStart only, so posttooluse.sh ships but is never invoked there.
 CURSOR_PLUGIN_DESCRIPTION = (
     "Opt-in per-repo llm-wiki memory for Cursor: sessionStart orientation "
-    "(index + last-5 log), wiki-write-protocol push, and a knowledge-graph build."
+    "(index + last-5 log)."
 )
 VERSION_FILE = Path("VERSION")
 # Relative to a plugin directory, not to the repo root: after phase 4 the only
@@ -60,7 +58,9 @@ SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 TOKEN_RE = re.compile(r"\{\{([a-z_]+)\}\}")
 
 EXCLUDED_NAMES = {".DS_Store", "__pycache__"}
-EXCLUDED_PLUGIN_SUBPATHS = {Path("core/scripts/kg/build")}
+# Runtime-only directories that must never ride into the artifact tree.
+# Empty today; the mechanism stays for the next gitignored build/cache dir.
+EXCLUDED_PLUGIN_SUBPATHS: set[Path] = set()
 
 # Skill frontmatter routing. `name` and `description` are the three-way lowest
 # common denominator every harness reads. Everything else belongs to exactly one

@@ -79,7 +79,7 @@ done
 
 # --- Load shared library ---
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../scripts/lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$HERE/scripts/lib/common.sh"
 
 # --- Detect project identity ---
@@ -469,11 +469,11 @@ A typed edge is not a label that says "these two things are related." It is an *
 | \`up:\` | (none — implicit) | Parent / breadcrumb. Navigate upward in the hierarchy for category context. |
 | \`related:\` | (none — symmetric) | Fallback — no specific operation contract. Prefer a more specific edge type where one applies. |
 
-**Inverses are materialised by the KG, not authored.** Inverse predicates exist so that SPARQL queries can traverse a typed edge in either direction. The KG build pipeline (\`scripts/kg/\`) emits the inverse triple automatically from each forward assertion. **Agents do not write \`extendedBy:\`, \`supportedBy:\`, etc. in source documents.** When a back-reference would help a reader navigate, add it at the body level (typically in the target page's See also section), not as a frontmatter inverse. See [Edge-Types](Edge-Types) for the full 16-predicate vocabulary.
+**Inverses are materialised by the KG, not authored.** Inverse predicates exist so that a knowledge-graph build can traverse a typed edge in either direction; the build emits the inverse triple automatically from each forward assertion. **Agents do not write \`extendedBy:\`, \`supportedBy:\`, etc. in source documents.** When a back-reference would help a reader navigate, add it at the body level (typically in the target page's See also section), not as a frontmatter inverse. See [Edge-Types](Edge-Types) for the full 16-predicate vocabulary.
 
 Practical implications:
 
-- Different edge types license different retrievals. The KG pipeline (\`scripts/kg/\`) consumes these typed edges to build a SPARQL-queryable graph; the typing is what makes structural queries useful.
+- Different edge types license different retrievals. A knowledge-graph build consumes these typed edges to produce a queryable graph; the typing is what makes structural queries useful.
 - Edge types have domain and range. \`extends:\` points at a concept or theory; \`source:\` points at an external resource. Violating the domain/range breaks the operation.
 - Populate edge fields with the most specific type you can justify. Treat \`related:\` as a fallback. Over time, \`related:\` uses should become rarer as the edge vocabulary fits the work.
 
@@ -506,7 +506,7 @@ Use frontmatter when the whole page relates to the target that way. Use inline w
 
 Two distinct retrieval shapes, each suited to a different question:
 
-- **Topology questions** — *what connects to what*. Multi-hop relationships, concept chains, parent/child rollups, hub detection ("which pages cite this finding?"). Use the KG via SPARQL queries against \`scripts/kg/build/graph-full.ttl\` (in-process via rdflib by default; load into Fuseki when a live endpoint is needed).
+- **Topology questions** — *what connects to what*. Multi-hop relationships, concept chains, parent/child rollups, hub detection ("which pages cite this finding?"). Answer by following typed edges and \`[[links]]\` across pages; this is the query shape a knowledge-graph build over the typed edges serves when one is available.
 - **Content questions** — *what does this page actually say*. Definitions, prose claims, specific numbers, source quotations. Use a direct file read or grep.
 
 The right pattern: use the KG to discover *where* to look (which pages connect to the topic), then file tools to read *what* the chosen pages say. Reserve grep for non-wiki code or for content searches that span many files.
@@ -654,8 +654,6 @@ else
     echo "Next steps:"
     echo "  1. Run a lint pass to add frontmatter to existing pages:"
     echo "     Tell your LLM: \"Lint the wiki — focus on adding frontmatter to pages that are missing it\""
-    echo "  2. After frontmatter is in place, build the knowledge graph:"
-    echo "     ./scripts/kg/build-graph.sh"
 fi
 echo ""
 echo "If using GitHub wiki, push with:"

@@ -21,7 +21,7 @@ git -C .llm-wiki add <files-by-name>
 git -C .llm-wiki commit -m "<message>"
 ```
 
-Run these without asking; local commits are reversible. Before committing, run the **Verification Gate** (`core/agents/verification-gate.md` in the llm-wiki plugin) over every page created or edited: it catches projection-as-fact, missing corpus tags on numerical claims, missing back-references, and missing log/index entries. Push only when explicitly asked, and when pushing follow `core/agents/wiki-write-protocol.md` (the `wiki_push` wrapper) rather than plain `git push`, so concurrent writers never collide.
+Run these without asking; local commits are reversible. Before committing, run the **Verification Gate** (`core/agents/verification-gate.md` in the llm-wiki plugin) over every page created or edited: it catches projection-as-fact, missing corpus tags on numerical claims, missing back-references, and missing log/index entries. Push only when explicitly asked.
 
 Honest reporting: bad results and contradicted claims get filed truthfully, not polished; never report metrics from projections, only from real outputs. See `core/agents/discipline-gates.md` for the "Universal Rationalizations (Always Wrong)" table.
 

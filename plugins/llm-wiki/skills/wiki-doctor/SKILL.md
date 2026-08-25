@@ -11,9 +11,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/core/scripts/wiki-doctor.sh"
 ```
 
 It prints a green/red checklist, plugin root, gate files, hooks declared,
-`.llm-wiki/` attachment, KG deps, remote reachability, and an orientation
-dry-run showing the last log entry SessionStart would surface. Structural
-failures set a non-zero exit; missing KG deps or no network are warnings.
+`.llm-wiki/` attachment, remote reachability, and an orientation dry-run
+showing the last log entry SessionStart would surface. Structural failures
+set a non-zero exit; no network is a warning.
 
 If a structural check FAILs, help the user fix it: run `/wiki-init` if
 `.llm-wiki/` is absent; reinstall the plugin if the root, gates, or hooks are
