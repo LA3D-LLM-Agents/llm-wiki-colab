@@ -34,6 +34,23 @@ Items move out of this file when they land or when a decision retires them.
 - Until the self-contained-skill restructure lands, skill references to shared `core/` files sit outside the skill root, and the `preToolUse` export is what makes the shell route to them deterministic.
   New skills should phrase script references as commands rather than read-this-file pointers.
 
+## Doctor retirement
+
+- Retire `/wiki-doctor`: the skill, `core/scripts/wiki-doctor.sh`, and the doctor's dialect-sniffing machinery.
+  The doctor is an artifact of the pre-plugin template install, where structural checks against files copied into a user's repo were genuinely user-actionable.
+  Plugin installation is atomic, so invoking the skill already proves the tree it would verify, and every structural check duplicates the test suite run against the built artifact.
+  Disposition of each check:
+  Checks 1 to 3 (dialect manifest, gate files, hooks declared) are packaging invariants asserted more strongly by `test_manifests.sh`, `test_path_integrity.sh`, `test_codex_manifests.sh`, `test_cursor_manifests.sh`, and `test_hooks.sh`.
+  Check 8 (jq, curl, gh) already lives at point of use: `ask.sh` and `enroll.sh` guard with `require_cmd` and die naming the missing command, and enroll additionally verifies gh authentication via `gh api /user`, which the doctor never checked.
+  Check 4 (`.llm-wiki/` attached) reports opt-in state as a fault; absence is only actionable inside `/wiki-init`, which already owns that flow and probes the remote.
+  Check 5 (remote reachable, push-ready) preconditions an action the plugin never performs, since pushes are user-initiated and a real push self-reports with git's own error.
+  Prerequisites before deletion:
+  Close the codex gap where no assertion covers `core/` presence (`test_codex_manifests.sh` byte-compares only four hook and template files, so an emitter that dropped `core/agents/` would pass), and assert the Claude subtree carries no foreign manifests.
+  Replace the doctor as the probe in `test_cursor_manifests.sh`, where the emitted-subtree check greps its output and the gated smoke's decisive assertion is its "from CLAUDE_PLUGIN_ROOT" line; a small test-only script that reports where it resolved its plugin root covers both uses without shipping to users.
+  Update the exactly-seven-skills and per-skill assertions in `test_skills.sh`, `test_path_integrity.sh`, and both platform manifest tests, all of which name wiki-doctor.
+  Landing this supersedes the doctor references elsewhere in this file: the self-contained-skill item's note that `wiki-doctor.sh` keeps its `core/` layout, and the KG item's plan to restore an optional-deps warning in the doctor.
+  If any user-facing self-check survives, its honest scope is per-repo state only; the current SKILL.md advertises "hooks are not firing" as a use case, which the script cannot diagnose because harness hook registration is invisible to it.
+
 ## Removed pending reimplementation
 
 Both subsystems below were removed rather than carried, because their code and documentation still targeted the ancestor template layout.
