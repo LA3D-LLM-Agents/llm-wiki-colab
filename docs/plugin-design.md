@@ -122,5 +122,4 @@ Cursor silently ignores symlinks inside an installed plugin, which is why every 
 
 ## Open verification items
 
-- A repo with the GitHub Wiki feature disabled (not merely empty) should fail cleanly to the create-first-page path and never attach the main repo. Unconfirmed.
-- A live-session check that the SessionStart orientation actually appears in a real installed Claude session. Unconfirmed.
+Deferred work and unconfirmed behavior are collected in [deferred.md](deferred.md).
