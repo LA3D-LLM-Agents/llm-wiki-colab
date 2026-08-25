@@ -77,10 +77,80 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# --- Load shared library ---
+# --- Helpers ---
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/lib/common.sh
-source "$HERE/scripts/lib/common.sh"
+CORE_DIR="$(cd "$HERE/../../../core" && pwd)"
+
+lw_warn() { printf 'warning: %s\n' "$*" >&2; }
+lw_die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+lw_repo_root() {
+    local root
+    root="$(git -C "${1:-.}" rev-parse --show-toplevel 2>/dev/null)" \
+        || lw_die "not inside a git repository"
+    printf '%s\n' "$root"
+}
+
+lw_origin_url() {
+    local url
+    url="$(git -C "${1:-.}" remote get-url origin 2>/dev/null)" || return 1
+    printf '%s\n' "$url"
+}
+
+lw_repo_slug() {
+    local url="$1"
+    url="${url%.git}"
+    url="${url%/}"
+    case "$url" in
+        *://*) url="${url#*://}"; url="${url#*@}"; url="${url#*/}" ;;
+        *@*:*) url="${url#*@}"; url="${url#*:}" ;;
+    esac
+    printf '%s\n' "$url"
+}
+
+lw_repo_from_url() {
+    local slug
+    slug="$(lw_repo_slug "$1")"
+    printf '%s\n' "${slug##*/}"
+}
+
+lw_wiki_url() {
+    local url="$1" rest host
+    rest="$url"
+    case "$rest" in
+        *://*) rest="${rest#*://}"; rest="${rest#*@}" ;;
+        *@*:*) rest="${rest#*@}" ;;
+    esac
+    host="${rest%%[:/]*}"
+    case "$host" in
+        *github*) : ;;
+        *) lw_die "lw_wiki_url: GitHub-only; refusing to derive a wiki URL for non-GitHub host '$host' (origin: $url)" ;;
+    esac
+    url="${url%.git}"
+    printf '%s\n' "${url}.wiki.git"
+}
+
+lw_default_branch() {
+    local remote="${1:-origin}" dir="${2:-.}" head
+    head="$(git -C "$dir" symbolic-ref --quiet --short "refs/remotes/$remote/HEAD" 2>/dev/null)" \
+        && { printf '%s\n' "${head#"$remote/"}"; return 0; }
+    head="$(git -C "$dir" remote show "$remote" 2>/dev/null \
+        | awk '/HEAD branch:/ {print $NF; exit}')"
+    [[ -n "$head" && "$head" != "(unknown)" ]] && { printf '%s\n' "$head"; return 0; }
+    return 1
+}
+
+lw_name_from_origin() {
+    local root="${1:?repo root required}" url name=""
+    if url="$(lw_origin_url "$root")"; then
+        name="$(lw_repo_from_url "$url")"
+    fi
+    if [[ -z "$name" ]]; then
+        name="$(basename "$root")"
+        lw_warn "no origin remote; falling back to directory name '$name' for project identity"
+    fi
+    printf '%s\n' "$name"
+}
 
 # --- Detect project identity ---
 # Two distinct names, kept separate on purpose so they cannot silently
@@ -122,22 +192,22 @@ LOG_NS="log_${REPO_NAME}"
 SCHEMA_NS="SCHEMA_${REPO_NAME}"
 
 # --- Stamp wiki/*.md.template files into the wiki ---------------------------
-# Each *.md.template alongside this script gets sed-substituted (same
+# Each core/*.md.template gets sed-substituted (same
 # placeholders as scripts/instantiate.sh: {{REPO_NAME}}, {{PROJECT_NAME}})
 # and written into the wiki sub-repo with the .template suffix stripped.
 # Idempotent on update mode: re-stamping overwrites with the same content.
 # With --missing-only, pages that already exist are left untouched (the
 # adopt already-present path wants exactly that: create what is absent,
 # never overwrite host content).
-# Anchored on BASH_SOURCE (= $HERE), not $0: a $0-based dirname resolves to
+# Anchored on BASH_SOURCE-derived $CORE_DIR, not $0: a $0-based dirname resolves to
 # "." when the script is invoked by bare name via PATH, which would miss the
-# *.md.template files sitting next to this script (F10).
+# core/*.md.template files (F10).
 stamp_wiki_templates() {
     local missing_only=false
     if [[ "${1:-}" == "--missing-only" ]]; then missing_only=true; fi
     local stamped=() tpl out_name out_path t
     shopt -s nullglob
-    for tpl in "$HERE"/*.md.template; do
+    for tpl in "$CORE_DIR"/*.md.template; do
         out_name="$(basename "${tpl%.template}")"
         out_path="$WIKI_DIR/$out_name"
         if [[ "$missing_only" == true && -e "$out_path" ]]; then

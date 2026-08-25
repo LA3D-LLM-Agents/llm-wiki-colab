@@ -277,7 +277,7 @@ assert_empty "$SYMLINKS" "no symlink anywhere in the assembled output${SYMLINKS:
 # actually ships, invoked the way a Cursor agent would: absolute path, and no
 # plugin-root variable in the environment.
 d="$(mk_scratch https://github.com/foo/bar.git)"
-( cd "$d" && bash "$CURSOR_PLUGIN_ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
+( cd "$d" && bash "$CURSOR_PLUGIN_ROOT/skills/wiki-init/scripts/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
 dout="$( cd "$d" && env -u CLAUDE_PLUGIN_ROOT bash "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/scripts/wiki-doctor.sh" 2>&1 )"
 assert_contains "$dout" "cursor dialect"        "doctor reads the emitted cursor subtree as cursor dialect"
 assert_contains "$dout" "orientation dry-run emits" "doctor's dry-run reaches orientation through the adapter"

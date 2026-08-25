@@ -9,7 +9,7 @@ require_env PLUGIN_ROOT CODEX_PLUGIN_ROOT
 
 # Attach a wiki (local create mode) so the structural checks have something real.
 d="$(mk_scratch https://github.com/foo/bar.git)"
-( cd "$d" && bash "$PLUGIN_ROOT/core/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
+( cd "$d" && bash "$PLUGIN_ROOT/skills/wiki-init/scripts/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
 
 run_doctor() {
     ( cd "$d" && CLAUDE_PLUGIN_ROOT="$1" bash "$1/skills/wiki-doctor/scripts/wiki-doctor.sh" 2>&1 )

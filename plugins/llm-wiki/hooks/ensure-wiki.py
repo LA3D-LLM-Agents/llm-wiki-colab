@@ -99,7 +99,7 @@ def update_wiki(wiki_dir: Path) -> Optional[str]:
         return None
 
     # Default branch, detected not guessed (mirrors lw_default_branch in
-    # scripts/lib/git.sh). A jj clone does not populate origin/HEAD, so fall
+    # init-wiki.sh). A jj clone does not populate origin/HEAD, so fall
     # back to asking the remote; a non-GitHub or single-branch wiki still
     # resolves to its one branch.
     branch = None
