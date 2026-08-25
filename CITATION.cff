@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite both the software and the paper it implements (see preferred-citation)."
 title: "llm-wiki-colab: an llm-wiki durable-memory plugin"
-abstract: "A Claude Code (and later Cursor) plugin that packages the llm-wiki durable-memory pattern as installable, opt-in tooling: per-repo wiki memory, SessionStart orientation, verification/discipline gates, a knowledge-graph build, multi-writer push, and federated ask."
+abstract: "A Claude Code, Codex, and Cursor plugin that packages the llm-wiki durable-memory pattern as installable, opt-in tooling: per-repo wiki memory, SessionStart orientation, verification/discipline gates, a knowledge-graph build, multi-writer push, and federated ask."
 type: software
 authors:
   - given-names: Priscila
@@ -16,7 +16,7 @@ authors:
     email: csweet1@nd.edu
     affiliation: "University of Notre Dame"
 repository-code: "https://github.com/LA3D-LLM-Agents/llm-wiki-colab"
-version: "0.2.0"
+version: "0.3.0"
 date-released: "2026-07-22"
 keywords:
   - llm-wiki

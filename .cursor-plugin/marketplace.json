@@ -10,8 +10,8 @@
   "plugins": [
     {
       "name": "llm-wiki",
-      "source": "./claude/plugins/llm-wiki",
-      "description": "Opt-in per-repo llm-wiki memory for Claude Code: SessionStart orientation (index + last-5 log), verification-gate advisory, wiki-write-protocol push, and a knowledge-graph build."
+      "source": "./cursor/plugins/llm-wiki",
+      "description": "Opt-in per-repo llm-wiki memory for Cursor: sessionStart orientation (index + last-5 log), wiki-write-protocol push, and a knowledge-graph build."
     }
   ]
 }

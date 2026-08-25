@@ -8,7 +8,17 @@
 # install on an offline machine still exits 0.
 set -uo pipefail
 
+# Where the plugin lives. Claude Code exports CLAUDE_PLUGIN_ROOT into the shell
+# that runs a skill's commands, and on Cursor the plugin's preToolUse hook
+# exports it onto the command. The fallback is the script's own location, two
+# levels up from core/scripts/, which keeps the doctor able to report on an
+# install where neither of those happened.
 PR="${CLAUDE_PLUGIN_ROOT:-}"
+PR_SRC="CLAUDE_PLUGIN_ROOT"
+if [ -z "$PR" ]; then
+    PR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)"
+    PR_SRC="script location"
+fi
 FAIL=0
 ok()   { echo "  ok    $1"; }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL + 1)); }
@@ -16,11 +26,28 @@ warn() { echo "  warn  $1"; }
 
 echo "llm-wiki doctor"
 
+# 0. Which harness's tree is this? One source emits three subtrees and this
+# script is copied byte-identical into all of them, so the tree has to say which
+# dialect it is. Each subtree carries exactly one manifest directory (every
+# emitter deletes the foreign ones), which makes the manifest that is present
+# the dialect marker.
+DIALECT=""
+MANIFEST=""
+if [ -n "$PR" ]; then
+    for d in claude codex cursor; do
+        if [ -f "$PR/.$d-plugin/plugin.json" ]; then
+            DIALECT="$d"
+            MANIFEST=".$d-plugin/plugin.json"
+            break
+        fi
+    done
+fi
+
 # 1. Plugin root resolves and carries the manifest.
-if [ -n "$PR" ] && [ -f "$PR/.claude-plugin/plugin.json" ]; then
-    ok "plugin root resolves ($PR)"
+if [ -n "$DIALECT" ]; then
+    ok "plugin root resolves ($PR, $DIALECT dialect via $MANIFEST, from $PR_SRC)"
 else
-    bad "CLAUDE_PLUGIN_ROOT unset or missing .claude-plugin/plugin.json (value: '${PR:-unset}')"
+    bad "plugin root carries no .claude-plugin/, .codex-plugin/, or .cursor-plugin/ plugin.json (value: '${PR:-unset}', from $PR_SRC)"
 fi
 
 # 2. Gate files shipped.
@@ -30,11 +57,24 @@ for g in verification-gate discipline-gates wiki-write-protocol; do
 done
 [ -z "$missing" ] && ok "gate files present (core/agents/)" || bad "missing gate file(s):$missing"
 
-# 3. Hooks declared.
-if [ -f "$PR/hooks/hooks.json" ] && grep -q SessionStart "$PR/hooks/hooks.json" && grep -q PostToolUse "$PR/hooks/hooks.json"; then
-    ok "hooks.json declares SessionStart + PostToolUse"
+# 3. Hooks declared, in this harness's dialect. Claude and Codex read the same
+# Claude-dialect file (only the PostToolUse matcher differs between them).
+# Cursor reads a native-dialect file: lowercase `sessionStart`, driven through
+# an adapter, and no PostToolUse advisory at all, so demanding one there would
+# report a failure the tree is not supposed to have.
+HOOKS_FILE="$PR/hooks/hooks.json"
+if [ "$DIALECT" = "cursor" ]; then
+    if [ -f "$HOOKS_FILE" ] && grep -q sessionStart "$HOOKS_FILE"; then
+        ok "hooks.json declares sessionStart"
+    else
+        bad "hooks.json missing or does not declare sessionStart"
+    fi
 else
-    bad "hooks.json missing or does not declare both hooks"
+    if [ -f "$HOOKS_FILE" ] && grep -q SessionStart "$HOOKS_FILE" && grep -q PostToolUse "$HOOKS_FILE"; then
+        ok "hooks.json declares SessionStart + PostToolUse"
+    else
+        bad "hooks.json missing or does not declare both hooks"
+    fi
 fi
 
 # 4. Wiki attached (opt-in): .llm-wiki/ is its own git repo.
@@ -75,9 +115,20 @@ if [ -d .llm-wiki ]; then
     fi
 fi
 
-# 7. Orientation dry-run: what SessionStart would inject.
-if [ -f "$PR/hooks/session-start.sh" ]; then
-    orient="$(bash "$PR/hooks/session-start.sh" 2>/dev/null || true)"
+# 7. Orientation dry-run: what session start would inject. Cursor reaches the
+# same hook through an adapter that takes the plugin root as argv[1], so the
+# dry-run goes through whichever entry point the harness itself invokes.
+if [ "$DIALECT" = "cursor" ]; then
+    ENTRY="$PR/hooks/cursor-session-start.sh"
+    ENTRY_REL="hooks/cursor-session-start.sh"
+    ENTRY_CMD=(bash "$ENTRY" "$PR")
+else
+    ENTRY="$PR/hooks/session-start.sh"
+    ENTRY_REL="hooks/session-start.sh"
+    ENTRY_CMD=(bash "$ENTRY")
+fi
+if [ -f "$ENTRY" ]; then
+    orient="$("${ENTRY_CMD[@]}" </dev/null 2>/dev/null || true)"
     if printf '%s' "$orient" | grep -q "durable memory"; then
         ok "orientation dry-run emits the session-start reminder"
         tail="$(printf '%s\n' "$orient" | awk '/last 5 log entries/{f=1} f' | grep '^## \[' | tail -1)"
@@ -86,7 +137,7 @@ if [ -f "$PR/hooks/session-start.sh" ]; then
         warn "session-start produced no orientation (is .llm-wiki attached and scaffolded?)"
     fi
 else
-    bad "hooks/session-start.sh missing"
+    bad "$ENTRY_REL missing"
 fi
 
 # 8. Federation ask deps (optional; only /wiki-ask and /wiki-enroll need them).
