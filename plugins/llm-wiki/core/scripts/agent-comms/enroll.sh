@@ -314,7 +314,7 @@ fi
   echo "      or use your LLM CLI's session in the wiki-sub-repo directory to"
   echo "      have it propose updates (e.g. \`cd $WIKI_DIR && claude\`)."
   echo "  • Test the federation:"
-  echo "      bash ${CLAUDE_PLUGIN_ROOT}/core/scripts/agent-comms/ask.sh ${AGENT_NAME:-agent} \"what do you do?\""
+  echo "      bash ${CLAUDE_PLUGIN_ROOT}/skills/wiki-ask/scripts/ask.sh ${AGENT_NAME:-agent} \"what do you do?\""
 } >&2
 
 exit 0

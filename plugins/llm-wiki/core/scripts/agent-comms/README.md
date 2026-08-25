@@ -5,7 +5,6 @@ repo's `scripts/agent-comms/` directory.
 
 ## Files
 
-- `ask.sh` — cross-agent question primitive (discovery or direct mode)
 - `enroll.sh` — interactive registration with the LA3D-LLM-Agents federation
 - `README.md` — this file
 
@@ -17,10 +16,10 @@ After enabling the feature, register this repo:
 bash scripts/agent-comms/enroll.sh
 ```
 
-Then ask a question:
+Then use the `wiki-ask` skill to ask a question.
 
 ```
-bash scripts/agent-comms/ask.sh "what does chrissweet/agent-comms do?"
+/wiki-ask "what does chrissweet/agent-comms do?"
 ```
 
 See the [design page](https://github.com/LA3D-LLM-Agents/agent-comms/wiki/Comms-Feature-Design)
