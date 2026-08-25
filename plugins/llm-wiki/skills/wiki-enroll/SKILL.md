@@ -7,7 +7,7 @@ disable-model-invocation: true
 Run the enrollment helper and relay its interactive output:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/core/scripts/agent-comms/enroll.sh"
+bash "${CLAUDE_SKILL_DIR}/scripts/enroll.sh"
 ```
 
 It idempotently generates `.llm-wiki/Card_<agent>.md` from prompts (description, topics, capabilities) and, for repos outside the `LA3D-LLM-Agents` org, offers to add the `nd-llm-wiki` GitHub topic so the federation index can discover this agent (subject to a trusted-owner allowlist). Pass `--dry-run` to preview without writing anything.

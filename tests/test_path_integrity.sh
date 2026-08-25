@@ -15,7 +15,6 @@ for f in \
     core/agents/discipline-gates.md \
     core/scripts/wiki-doctor.sh \
     core/scripts/wiki-reciprocity.py \
-    core/scripts/agent-comms/enroll.sh \
     core/templates/guidance.md \
     hooks/ensure-wiki.py \
     hooks/session-start.sh \
@@ -27,6 +26,7 @@ for f in \
     skills/wiki-ask/SKILL.md \
     skills/wiki-ask/scripts/ask.sh \
     skills/wiki-enroll/SKILL.md \
+    skills/wiki-enroll/scripts/enroll.sh \
     skills/wiki-lint/SKILL.md \
     skills/wiki-source/SKILL.md \
     skills/wiki-experiment/SKILL.md; do
