@@ -89,8 +89,14 @@ sleep 1
 unset ISOLATED_CURSOR_ALLOW_ACCOUNT_PLUGINS
 
 cd "$workspace" || exit 1
+# Cheapest tier by default: auto-smart[optimize_for=cost] is the flat-price
+# bundled Auto tier (tracks the current auto routing); a bare `auto` maps to
+# the metered `balanced` tier at roughly twice the price (probed 2026-08,
+# cursor Router).  The canary asserts wrapper facts, not model quality.
+# Override with ISOLATED_CURSOR_TEST_MODEL if the tier syntax rotates.
 out="$(ISOLATED_CURSOR_ROOT="$probe" "$HERE/isolated-cursor.sh" \
     -p --trust --sandbox disabled --mode ask --output-format text \
+    --model "${ISOLATED_CURSOR_TEST_MODEL:-auto-smart[optimize_for=cost]}" \
     --plugin-dir "$plugin" \
     'Reply with exactly: OK' </dev/null 2>&1)"
 rc=$?

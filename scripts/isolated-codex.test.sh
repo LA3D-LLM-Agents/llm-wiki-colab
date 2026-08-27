@@ -146,8 +146,12 @@ else
 fi
 
 # The one model call: copied-auth exec, rollout as the record surface.
+# Low-class model by default (name from the models_cache.json catalog,
+# 2026-08-27): the canary asserts wrapper facts, not model quality.
+# Override with ISOLATED_CODEX_TEST_MODEL when the catalog rotates it out.
 last="$scratch/last-message.txt"
 wrapped exec --skip-git-repo-check -s read-only -o "$last" \
+    -m "${ISOLATED_CODEX_TEST_MODEL:-gpt-5.6-luna}" \
     'Reply with exactly: OK' >/dev/null
 rc=$?
 if [ "$rc" -eq 0 ]; then ok "exec session exit 0"; else bad "exec session exit $rc: $(tail -2 "$scratch/wrapper-stderr.log" | tr '\n' ' ')"; fi

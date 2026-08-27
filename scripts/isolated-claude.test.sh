@@ -123,8 +123,11 @@ marker="$scratch/marker"
 touch "$marker"
 sleep 1
 
+# Low-class model by default: the canary asserts wrapper facts, not model
+# quality.  Override with ISOLATED_CLAUDE_TEST_MODEL if the alias breaks.
 sid="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen)"
 out="$(wrapped -p --max-budget-usd 1 --session-id "$sid" \
+    --model "${ISOLATED_CLAUDE_TEST_MODEL:-haiku}" \
     --plugin-dir "$plugin" \
     'Reply with exactly: OK')"
 rc=$?
