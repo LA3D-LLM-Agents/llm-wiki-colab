@@ -50,7 +50,11 @@ fi
 FAIL=0
 for t in "$HERE"/test_*.sh; do
     echo "===== $(basename "$t") ====="
-    if bash "$t"; then :; else FAIL=$((FAIL + 1)); fi
+    # stdin is severed from any terminal: platform CLIs under test (claude,
+    # cursor-agent) touch a tty on fd 0 when given one, and under a task
+    # runner's background process group that read is a SIGTTIN stop -- the
+    # suite freezes instead of finishing.
+    if bash "$t" </dev/null; then :; else FAIL=$((FAIL + 1)); fi
     echo ""
 done
 

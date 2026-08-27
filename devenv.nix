@@ -9,7 +9,8 @@
     pkgs.uv
   ];
 
-  enterTest = ''
-    bash tests/run.sh
-  '';
+  tasks."llm-wiki:test" = {
+    exec = "bash ./tests/run.sh";
+    before = [ "devenv:enterTest" ];
+  };
 }
