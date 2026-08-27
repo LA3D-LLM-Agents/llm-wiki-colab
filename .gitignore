@@ -2,5 +2,6 @@
 plugins/llm-wiki/core/scripts/kg/build/
 .llm-wiki/
 .devenv*
+devenv.local.nix
 .direnv/
 build/out/
