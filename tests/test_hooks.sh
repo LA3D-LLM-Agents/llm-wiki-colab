@@ -27,8 +27,26 @@ assert_contains "$out" "2 pages, 7 log entries" "banner reports page and log cou
 # Model-facing context rides hookSpecificOutput.additionalContext.
 assert_contains "$out" '"additionalContext"' "model context uses additionalContext"
 assert_contains "$out" "page Alpha" "index folded into additionalContext"
-assert_contains "$out" "E7" "last-5 includes newest entry"
+assert_contains "$out" "| E7" "last-5 includes newest entry"
+# Both edges of the window are pinned: a narrower slice keeps E7 but drops E3,
+# a wider one keeps E3 but also drags in E2.
+assert_contains "$out" "| E3" "last-5 reaches back to the 5th-newest entry"
 assert_not_contains "$out" "| E2" "last-5 excludes the 6th-newest and older"
+# The behavioral guidance file is appended silently, so nothing else notices if
+# it stops being read. Pin a phrase that appears only in guidance.md.
+assert_contains "$out" "mis-allocation drops content into ambiguity" \
+    "guidance.md folded into additionalContext"
+rm -rf "$d"
+
+# 2b. The Cursor adapter must carry the same guidance through its own dialect
+#     (additional_context), not just the Claude-shaped response.
+d="$(mk_scratch https://github.com/foo/bar.git)"
+git init -q "$d/.llm-wiki"
+printf '# Index\n- page Alpha\n' > "$d/.llm-wiki/index_bar.md"
+out="$(cd "$d" && CURSOR_PROJECT_DIR="$d" bash "$CURSOR_PLUGIN_ROOT/hooks/cursor-session-start.sh" "$CURSOR_PLUGIN_ROOT")"
+ctx="$(printf '%s' "$out" | jq -r '.additional_context // ""')"
+assert_contains "$ctx" "mis-allocation drops content into ambiguity" \
+    "guidance.md reaches the Cursor adapter's additional_context"
 rm -rf "$d"
 
 # Missing jq must reach model context on every emitted platform without losing

@@ -172,6 +172,29 @@ with tempfile.TemporaryDirectory() as td:
         check(f"{operation} timeout: never merges", not any(c[0] == "merge" for c in calls))
         check(f"{operation} timeout: preserves HEAD", head(wiki) == before)
 
+    # ---- GIT: no origin remote -> refuses before any network, HEAD unchanged ----
+    # A wiki created locally by /wiki-init but never pushed has no origin. The
+    # guard must say so rather than letting `git fetch origin <branch>` fail
+    # into the generic "fetch failed" wording, and must not touch the checkout.
+    wiki = base / "g_noremote"
+    wiki.mkdir()
+    git("init", "-q", str(wiki))
+    (wiki / "index.md").write_text("A\n")
+    git("-C", str(wiki), "add", ".")
+    git("-C", str(wiki), "commit", "-qm", "A")
+    before = head(wiki)
+    calls = []
+    def record(argv, **kwargs):
+        calls.append(argv[3:])
+        return real_run(argv, **kwargs)
+    with patch.object(ew.subprocess, "run", side_effect=record):
+        r = ew.update_wiki(wiki)
+    check("git no-origin: names the missing origin remote",
+          bool(r) and "no origin remote configured" in r)
+    check("git no-origin: never fetches or merges",
+          not any(c[:1] in (["fetch"], ["merge"]) for c in calls))
+    check("git no-origin: HEAD unchanged", head(wiki) == before)
+
     # ---- GIT: wiki dir is NOT its own repo root -> guard bails, parent safe ----
     # The parent is itself a CLEAN clone that is behind its own upstream, with a
     # committed (non-repo) dir at wiki/p.wiki. With the weak --is-inside-work-

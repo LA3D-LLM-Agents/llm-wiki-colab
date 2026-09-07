@@ -153,6 +153,13 @@ if [ -x "$CURSOR_PRETOOL" ]; then
 else
     _fail "cursor pre-tool-use adapter is not executable"
 fi
+CURSOR_POSTTOOL="$CURSOR_PLUGIN_ROOT/hooks/cursor-post-tool-use.sh"
+assert_file "$CURSOR_POSTTOOL" "cursor subtree ships hooks/cursor-post-tool-use.sh"
+if [ -x "$CURSOR_POSTTOOL" ]; then
+    _pass "cursor post-tool-use adapter is executable"
+else
+    _fail "cursor post-tool-use adapter is not executable"
+fi
 
 # --- the pre-tool-use adapter, driven directly ------------------------------
 # A fabricated preToolUse payload through the emitted script, so the rewrite is
