@@ -111,13 +111,14 @@ class HarnessRun:
             self.command(f"{case}-marketplace", ["plugin", "marketplace", "add", str(self.market)], probe)
             self.command(f"{case}-install", ["plugin", "add", "metadata-fixture@metadata-market"], probe)
 
-    def session(self, case, prompt, *, plugin_loaded, trust_hooks=False):
+    def session(self, case, prompt, *, plugin_loaded, trust_hooks=False, writable=False):
+        self.report["writable"] = writable
         self.report["hook_trust"] = "bypassed" if trust_hooks else "default"
         probe = self.root / case
         session_id = str(uuid.uuid4())
         if self.harness == "codex":
             last = self.root / f"{case}.last-message"
-            args = ["exec", "--skip-git-repo-check", "-s", "read-only",
+            args = ["exec", "--skip-git-repo-check", "-s", "workspace-write" if writable else "read-only",
                     "-m", self.resolved_model, "-o", str(last)]
             if trust_hooks:
                 args.append("--dangerously-bypass-hook-trust")
@@ -128,8 +129,11 @@ class HarnessRun:
             if self.harness == "claude":
                 args += ["--session-id", session_id, "--model", self.resolved_model,
                          "--max-budget-usd", "1"]
+                if writable:
+                    args += ["--permission-mode", "acceptEdits"]
             else:
-                args += ["--trust", "--sandbox", "disabled", "--mode", "ask", "--output-format", "text"]
+                args += ["--trust", "--sandbox", "disabled", "--output-format", "text"]
+                args += ["--force"] if writable else ["--mode", "ask"]
                 if self.model:
                     args += ["--model", self.model]
             if plugin_loaded:

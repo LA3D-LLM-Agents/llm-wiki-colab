@@ -80,6 +80,31 @@ trust mode; the bypassed pass does not establish ordinary headless delivery.
 These tests cover startup context, not resume/compaction events, user-visible
 banners, or the built llm-wiki orientation hook.
 
+`test_post_write.py` tests advisory delivery after Claude `Write` and `Edit`,
+Codex `apply_patch`, and Cursor `Write`. Each case performs two scratch writes:
+one with a silent post-tool hook and one with an emitting hook. The hook captures
+its input and reads the target before generating a fresh advisory token. Both
+controls require the matching tool event, the intended target, and completed
+file contents observed by the hook. The positive control also requires incoming
+advisory context and token recovery; the token never goes in the written file.
+
+```sh
+uv run --with pytest python -B -m pytest tests/harness/test_post_write.py --run-live --keep -s
+```
+
+These probes explicitly enable scratch-file writes: Claude accepts edits, Codex
+uses `workspace-write` and explicit fixture-hook trust, and Cursor uses `--force`.
+The other probes retain their existing modes. Target reads are permitted for
+edit prerequisites; calls that do not reference the target or that contain an
+advisory token fail the audit. Hook execution without delivery and assistant-only
+token echoes also fail. Claude uses API request captures for incoming context.
+
+The fixture emits structured `PostToolUse.additionalContext` on Claude/Codex and
+[`postToolUse.additional_context`](https://cursor.com/docs/hooks#posttooluse) on
+Cursor. This establishes harness capability, not the behavior of llm-wiki's
+current plain-stdout advisory. Cursor's `afterFileEdit` and actual plugin wiring
+remain separate questions. No assertion requires the model to follow the advice.
+
 ## Evidence and isolation
 
 The probes use `scripts/isolated-<harness>.sh` and clean `/tmp` workspaces. Wrappers
@@ -103,10 +128,13 @@ termination can leave scratch data behind.
   `Conversation` containing `TextMessage`, `ToolCall`, and `ToolResult` dataclasses.
 - `skill_assertions.py`: metadata and body evidence requirements.
 - `session_context.py`: generated session hooks and delivery evidence requirements.
+- `post_write.py`: generated post-tool hooks and completed-write delivery evidence.
 - `test_skill_metadata.py`, `test_skill_body.py`: explicit capability sequences.
 - `test_session_context.py`: SessionStart delivery and Codex default-trust cases.
+- `test_post_write.py`: native file-write tools and post-tool advisory delivery.
 - `test_conversation.py`, `test_skill_*_audit.py`: offline parser and assertion tests.
 - `test_session_context_audit.py`: offline context delivery controls.
+- `test_post_write_audit.py`: offline write/target binding and advisory controls.
 
 The older `cursor/test_session_context.sh` remains separately invocable; the
 pytest suite now covers that delivery capability with an added silent control.
