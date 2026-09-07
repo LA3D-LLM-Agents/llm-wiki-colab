@@ -1,87 +1,86 @@
 # Harness capability probes
 
-Run skill metadata delivery independently of `tests/run.sh`:
+Run these Python tests independently of the Bash suite:
 
 ```sh
-python3 tests/harness/test_skill_metadata.py codex
-python3 tests/harness/test_skill_metadata.py claude
-python3 tests/harness/test_skill_metadata.py cursor
+uv run --with pytest python -B -m pytest tests/harness
 ```
 
-`all` runs all three. Claude and Cursor each spend two model calls: one without
-the fixture plugin and one with it. Codex uses local `debug prompt-input` output,
-so its result establishes rendered-prompt inclusion, not a completed model call.
-Claude defaults to `haiku`; Cursor uses its harness default. `--model NAME`
-overrides the model for a single live harness.
-
-Each probe uses `scripts/isolated-<harness>.sh`, a clean `/tmp` workspace, and
-separate state roots for the absent/present cases. The wrappers currently require
-credentials even for Codex's local inspection. Missing CLI or credentials is a
-skip, not a pass. Exit codes: 0 for no failures and at least one pass, 1 for any
-failure, 77 when everything was skipped.
-
-The fixture is a minimal native plugin with one skill. Its random name and
-description marker never appear in the user prompt. The body carries a third
-marker, which must not appear in the response. Live probes require name and
-description marker recovery and audit the recorded conversation for tool use;
-Tools remain registered: removing Claude's Skill tool can also remove the
-metadata being tested. The prompt prohibits tool use, and the audit enforces
-this for both live harnesses. Cursor's ask mode alone does not prohibit reads.
-Missing audit evidence fails the probe.
-The negative control must produce nonempty output without either identifier.
-
-This measures metadata delivery only. It does not invoke the skill, test skill
-selection or instruction compliance, or establish that the built llm-wiki plugin
-is correctly packaged. The fixture deliberately omits optional frontmatter such
-as `disable-model-invocation`; those variations need separate cases.
-
-Use `--keep` to retain captures and `results.json` for investigation. Captures
-can contain account context, identity, and full API bodies; keep them private.
-Without `--keep`, scratch data is removed on completion, including failures.
-Auth copies are removed by the wrappers after each command. Ctrl-C lets wrapper
-signal cleanup run; forcibly killing the process can leave scratch data behind.
-
-The existing `cursor/test_session_context.sh` is a separate session-start delivery
-probe. Isolation canaries in `scripts/isolated-*.test.sh` test the wrappers
-themselves and are also explicitly invoked.
-
-Run the evidence-parser checks without CLIs, credentials, or model calls:
+By default this runs offline audit checks and Codex's local metadata inspection.
+Tests that make model calls are skipped unless `--run-live` is supplied. Selecting
+`-m live` alone does not authorize model calls. Missing CLIs or wrapper credentials
+also produce explicit skips. Pytest exit codes apply: an all-skipped run exits 0,
+so check the skip summary when verifying a harness.
 
 ```sh
-python3 -B -m unittest discover -s tests/harness -p test_skill_metadata_audit.py
+# Offline only; no harness CLIs or credentials needed
+uv run --with pytest python -B -m pytest tests/harness -m 'not capability'
+
+# All capabilities across all three harnesses, retaining private evidence
+uv run --with pytest python -B -m pytest tests/harness --run-live --keep -s
+
+# One capability and harness
+uv run --with pytest python -B -m pytest tests/harness/test_skill_body.py --run-live --harness codex
+
+# Override the model for a single harness
+uv run --with pytest python -B -m pytest tests/harness --run-live --harness claude --model haiku
+
+# List cases without executing them
+uv run --with pytest python -B -m pytest tests/harness --collect-only
 ```
 
-## Skill body delivery
+Each capability/harness pair is one test with its own negative and positive
+controls. Controls use separate harness state roots, and do not depend on other
+tests running first. Claude defaults to `haiku`, Codex's live sessions to
+`gpt-5.6-luna`, and Cursor to its harness default. `--model` requires a specific
+`--harness`; Codex's local prompt inspection does not use a model.
 
-```sh
-python3 -B tests/harness/test_skill_body.py all --keep
-python3 -B tests/harness/test_skill_body.py codex --model gpt-5.6-luna
-python3 -B -m unittest discover -s tests/harness -p 'test_skill_*_audit.py'
-```
+## Capabilities
 
-This probe spends two live sessions per harness, including Codex. Defaults are
-`haiku` for Claude, `gpt-5.6-luna` for Codex, and the Cursor default; `--model`
-overrides a single harness. It uses the same isolation, skip/exit conventions,
-and private capture handling as the metadata probe.
+`test_skill_metadata.py` checks that a random skill name and description marker
+are absent without the plugin and present after loading it. Codex renders its
+model-visible prompt locally. Claude and Cursor each spend two sessions reporting
+metadata, with conversation audits rejecting any tool use. Tools remain registered
+because removing Claude's Skill tool can also remove its metadata. The skill-body
+marker must not appear in either response.
 
-Both cases install a skill with identical name and description. The first body
-has no marker; the second has a fresh random token. Each case starts with fresh
-harness state, preventing cached skill bodies from satisfying the second case.
-The token is written only after the markerless control finishes, and never goes
-in the user prompt, description, or pre-session run metadata.
+`test_skill_body.py` spends two live sessions per harness, including Codex. Both
+cases install the same named skill and description. The first body has no marker;
+only after that control completes is the positive body token written. The prompt
+says `Load the skill {name}` using the bare name, then asks for the marker, without
+prescribing a file path or loading mechanism. Both cases require incoming body
+text, and the positive case also requires token recovery. An assistant echo alone
+or a control that never loaded the skill fails.
 
-The user prompt says `Load the skill {name}` using the bare skill name, then asks for its
-marker. It does not assume a plugin namespace or prescribe body loading or a
-file path. This does not require automatic skill selection. Both cases must show
-the body in incoming conversation
-evidence: a skill expansion, file-read result, or equivalent tool result. The
-positive case additionally requires token recovery in the final response. A
-correct assistant echo alone fails. The markerless control must demonstrably
-load its body, so a missing/unavailable skill cannot pass as a negative control.
+These minimal fixture plugins establish harness capabilities, not built-artifact
+wiring. Body reads and skill invocations are allowed in the body probe. Neither
+probe evaluates automatic skill selection, instruction compliance, or execution
+of bundled resources.
 
-Per-case audit files record body delivery and observed tool-call counts. Tool
-activity is allowed here, unlike the metadata probe. The result establishes
-body availability through explicit invocation/read; it does not claim native
-loader expansion when the model instead reads the advertised path. Bundled
-resource execution and whether the model follows body instructions are separate
-capabilities. These are fixture-plugin tests, not built-artifact wiring tests.
+## Evidence and isolation
+
+The probes use `scripts/isolated-<harness>.sh` and clean `/tmp` workspaces. Wrappers
+require credentials even for local Codex inspection. Codex live sessions retain
+its read-only sandbox; when launched inside another sandbox, nested sandbox
+initialization can fail before a file read. Report this as a failure rather than
+silently weakening the sandbox or retrying with different permissions.
+
+`--keep` retains raw captures and per-test `results.json`, including the version,
+model selection, last phase, case audits, and failure reason. Use `-s` to see paths
+for successful tests. Captures may contain identity, account context, and raw API
+bodies; keep them private. Without `--keep`, captures are deleted after each test,
+including failures. Wrappers remove credential copies after each command; forced
+termination can leave scratch data behind.
+
+## Code layout
+
+- `conftest.py`: pytest options, model-call gate, and run lifecycle fixture.
+- `harness_support.py`: native fixture plugins and isolated CLI execution.
+- `conversation.py`: harness-specific parsers validate raw records and return a
+  `Conversation` containing `TextMessage`, `ToolCall`, and `ToolResult` dataclasses.
+- `skill_assertions.py`: metadata and body evidence requirements.
+- `test_skill_metadata.py`, `test_skill_body.py`: explicit capability sequences.
+- `test_conversation.py`, `test_skill_*_audit.py`: offline parser and assertion tests.
+
+The existing `cursor/test_session_context.sh` and isolation canaries under
+`scripts/isolated-*.test.sh` remain separately invoked shell probes.

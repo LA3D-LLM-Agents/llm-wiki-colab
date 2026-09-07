@@ -1,49 +1,51 @@
-"""Offline checks for skill-body delivery evidence."""
+"""Body evidence must arrive on an incoming channel, not only in an answer."""
 
-import unittest
+import pytest
 
-from test_skill_body import body_evidence
-
-
-class BodyEvidenceTests(unittest.TestCase):
-    def check(self, records, present=True, output="BODY-secret"):
-        return body_evidence(records, "probe-name", "BODY-secret", present, output)
-
-    def test_claude_skill_expansion(self):
-        self.check([{"type": "user", "message": {"role": "user", "content":
-                    "Skill contents: Body-only marker: BODY-secret"}}])
-
-    def test_codex_read_result(self):
-        self.check([{"type": "response_item", "payload": {
-            "type": "function_call_output", "output": "Body-only marker: BODY-secret"}}])
-        self.check([{"type": "response_item", "payload": {
-            "type": "custom_tool_call_output", "output": [
-                {"type": "input_text", "text": "Body-only marker: BODY-secret"}]}}])
-
-    def test_cursor_tool_result(self):
-        self.check([{"role": "assistant", "content": [
-            {"type": "tool-result", "result": "Body-only marker: BODY-secret"}]}])
-
-    def test_assistant_echo_or_call_arguments_do_not_prove_delivery(self):
-        for part in ("text", "tool-call", "tool-invocation"):
-            with self.subTest(part=part), self.assertRaises(RuntimeError):
-                self.check([{"role": "assistant", "content": [
-                    {"type": part, "text": "Body-only marker: BODY-secret"}]}])
-
-    def test_control_must_load_body(self):
-        self.check([{"role": "tool", "content": "No body marker is supplied."}],
-                   present=False, output="NONE")
-        for content in ("Skill unavailable", "Body-only marker: BODY-secret"):
-            with self.subTest(content=content), self.assertRaises(RuntimeError):
-                self.check([{"role": "tool", "content": content}], present=False, output="NONE")
-
-    def test_missing_response_or_incoming_evidence_fails(self):
-        for records, output in (([], "BODY-secret"),
-                                ([{"role": "tool", "content": "Body-only marker: BODY-secret"}], "NONE"),
-                                ([{"role": "tool", "content": "Body-only marker: BODY-secret"}], "")):
-            with self.subTest(output=output), self.assertRaises(RuntimeError):
-                self.check(records, output=output)
+from .conversation import Conversation, TextMessage, ToolCall, ToolResult
+from .skill_assertions import body_evidence
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.mark.parametrize("conversation", [
+    Conversation(messages=[TextMessage("user", "Body-only marker: BODY-secret")]),
+    Conversation(results=[ToolResult("tool-result", "Body-only marker: BODY-secret")]),
+])
+def test_incoming_body_supports_recovery(conversation):
+    evidence = body_evidence(conversation, "probe", "BODY-secret", True, "BODY-secret")
+    assert evidence["body_received"] is True
+    assert evidence["delivery_channels"]
+
+
+@pytest.mark.parametrize("conversation", [
+    Conversation(messages=[TextMessage("assistant", "Body-only marker: BODY-secret")]),
+    Conversation(calls=[ToolCall("tool-call", "Body-only marker: BODY-secret")]),
+    Conversation(results=[ToolResult("tool_result", "Body-only marker: BODY-secret", failed=True)]),
+])
+def test_echo_arguments_and_failed_results_do_not_prove_delivery(conversation):
+    with pytest.raises(RuntimeError, match="no incoming"):
+        body_evidence(conversation, "probe", "BODY-secret", True, "BODY-secret")
+
+
+@pytest.mark.parametrize("content", ["Skill unavailable", "Body-only marker: BODY-secret"])
+def test_missing_body_or_token_leak_invalidates_control(content):
+    with pytest.raises(RuntimeError):
+        body_evidence(Conversation(results=[ToolResult("tool", content)]),
+                      "probe", "BODY-secret", False, "NONE")
+
+
+def test_markerless_control_requires_incoming_body():
+    body_evidence(Conversation(results=[ToolResult("tool", "No body marker is supplied.")]),
+                  "probe", "BODY-secret", False, "NONE")
+
+
+@pytest.mark.parametrize("output", ["NONE", ""])
+def test_body_delivery_without_recovery_fails(output):
+    with pytest.raises(RuntimeError):
+        body_evidence(Conversation(results=[ToolResult("tool", "Body-only marker: BODY-secret")]),
+                      "probe", "BODY-secret", True, output)
+
+
+def test_failed_read_without_body_does_not_prove_delivery():
+    with pytest.raises(RuntimeError, match="no incoming skill-body"):
+        body_evidence(Conversation(results=[ToolResult("tool", "Error: file not found")]),
+                      "probe", "BODY-secret", True, "BODY-secret")
