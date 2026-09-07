@@ -3,6 +3,8 @@
 import pytest
 
 from .conversation import rendered_prompt
+from .plugin_fixture import SkillFixture
+from .plugin_install import install_fixture
 from .skill_assertions import audit_messages, check_metadata
 
 PROMPT = (
@@ -19,15 +21,17 @@ PROMPT = (
 def test_skill_metadata(harness, harness_run):
     """Removing the plugin must remove both metadata identifiers from evidence."""
     run = harness_run
-    run.make_fixture(f"Body-only marker: {run.body_token}")
+    skill = SkillFixture.create(run.root, harness)
+    run.report.update(skill.metadata)
+    skill.replace_body(f"Body-only marker: {skill.body_token}")
     run.start(PROMPT if harness != "codex" else None, live=harness != "codex")
     for case, plugin_loaded in (("plugin_absent", False), ("plugin_present", True)):
-        plugin_dir = run.install_fixture(case) if plugin_loaded else None
+        plugin_dir = install_fixture(run, case, skill.plugin) if plugin_loaded else None
         if harness == "codex":
             output = rendered_prompt(run.command(case, ["debug", "prompt-input"], run.root / case))
         else:
             output, conversation = run.session(case, PROMPT, plugin_dir=plugin_dir)
             audit_messages(conversation)
-        check_metadata(output, run.name, run.description_token, run.body_token, plugin_loaded)
+        check_metadata(output, skill.name, skill.description_token, skill.body_token, plugin_loaded)
         run.record(case, {"metadata_present": plugin_loaded,
                           "evidence": "rendered prompt" if harness == "codex" else "recovery + no-tool audit"})

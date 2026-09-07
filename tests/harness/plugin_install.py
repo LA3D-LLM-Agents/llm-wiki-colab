@@ -29,3 +29,13 @@ def install_built_plugin(run, case, marketplace, *, plugin_name="llm-wiki", mark
     run.report["phase"] = f"{case}-install"
     run.save()
     installer(run, case, marketplace, plugin, marketplace_name)
+
+
+def install_fixture(run, case, fixture):
+    """Prepare a synthetic plugin and return any session directory override."""
+    run.report["loading"] = "local marketplace install" if run.harness == "codex" else "--plugin-dir"
+    run.save()
+    if run.harness == "codex":
+        install_codex(run, case, fixture.marketplace, fixture.path, "metadata-market")
+        return None
+    return fixture.path

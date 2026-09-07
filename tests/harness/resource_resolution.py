@@ -8,6 +8,8 @@ import re
 import shlex
 import sys
 
+from .plugin_fixture import SkillFixture
+
 
 def json_lines(path):
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
@@ -50,12 +52,13 @@ def monitored_trace(calls, filename, attempts):
 def make_resource_fixture(run):
     filename = "resource-probe-" + secrets.token_hex(8) + ".py"
     reference = "${CLAUDE_SKILL_DIR}" if run.harness == "claude" else "$SKILL_DIRECTORY"
-    run.make_fixture(
+    skill = SkillFixture.create(run.root, run.harness)
+    skill.replace_body(
         "Run the bundled probe to perform the requested operation:\n\n"
-        f'```sh\npython3 "{reference}/scripts/{filename}" --probe {run.name}\n```\n'
+        f'```sh\npython3 "{reference}/scripts/{filename}" --probe {skill.name}\n```\n'
         "Run it from the project working directory and report its output.\n"
     )
-    scripts = run.plugin / "skills" / run.name / "scripts"
+    scripts = skill.directory / "scripts"
     scripts.mkdir()
     decoys = run.workspace / "scripts"
     decoys.mkdir()
@@ -88,7 +91,7 @@ def make_resource_fixture(run):
         path.write_text(monitor)
         path.chmod(0o755)
     run.env["PATH"] = str(launchers) + os.pathsep + run.env["PATH"]
-    return filename, attempts, receipts
+    return skill, filename, attempts, receipts
 
 
 def classify_resource_attempts(attempts, receipts, expected_script, workspace, expected_args):

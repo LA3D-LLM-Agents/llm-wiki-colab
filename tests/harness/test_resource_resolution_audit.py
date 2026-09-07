@@ -59,12 +59,12 @@ def test_unobserved_or_compound_execution_cannot_pass(command):
 def test_failed_launch_and_decoy_are_logged_before_correct_execution(tmp_path):
     """A missing script leaves no receipt, so launch logging must precede exec."""
     run = HarnessRun(tmp_path, 'claude', tmp_path / 'unused-auth', None)
-    filename, attempts, receipts = make_resource_fixture(run)
-    correct = run.plugin / 'skills' / run.name / 'scripts' / filename
+    skill, filename, attempts, receipts = make_resource_fixture(run)
+    correct = skill.directory / 'scripts' / filename
     for script in (Path('missing') / filename, Path('scripts') / filename, correct):
-        subprocess.run(['python3', str(script), '--probe', run.name], env=run.env, cwd=run.workspace,
+        subprocess.run(['python3', str(script), '--probe', skill.name], env=run.env, cwd=run.workspace,
                        capture_output=True, check=False)
     launches, executed = json_lines(attempts), json_lines(receipts)
     assert len(launches) == 3
     assert [r['identity'] for r in executed] == ['decoy', 'intended']
-    assert classify_resource_attempts(launches, executed, correct, run.workspace, ['--probe', run.name]) == 'recovered'
+    assert classify_resource_attempts(launches, executed, correct, run.workspace, ['--probe', skill.name]) == 'recovered'

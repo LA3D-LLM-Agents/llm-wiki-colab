@@ -4,16 +4,17 @@ import json
 import re
 
 from .conversation import Conversation
-from .harness_support import plugin_fixture, write_json
+from .harness_support import write_json
+from .plugin_fixture import PluginFixture
 
 TOKEN = re.compile(r"POSTWRITE-[0-9a-f]{32}")
 CONTENTS = "after probe\n"
 
 
 def make_post_write_fixture(run, case, tool, target, *, emit):
-    run.market, run.plugin = plugin_fixture(run.root, run.harness)
+    plugin = PluginFixture.create(run.root, run.harness)
     capture = run.root / f"{case}.hook.jsonl"
-    script = run.plugin / "hooks/post-write.py"
+    script = plugin.path / "hooks/post-write.py"
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(
         "import json, secrets, sys\nfrom pathlib import Path\n"
@@ -33,8 +34,8 @@ def make_post_write_fixture(run, case, tool, target, *, emit):
     config = ({"version": 1, "hooks": {"postToolUse": [{"matcher": tool, **hook}]}}
               if run.harness == "cursor" else
               {"hooks": {"PostToolUse": [{"matcher": tool, "hooks": [hook]}]}})
-    write_json(run.plugin / "hooks/hooks.json", config)
-    return capture
+    write_json(plugin.path / "hooks/hooks.json", config)
+    return plugin, capture
 
 
 def post_write_evidence(conversation: Conversation, output, captures, tool, target, *, emitted,

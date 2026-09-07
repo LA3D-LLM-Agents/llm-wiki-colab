@@ -1,15 +1,13 @@
-"""Execution and fixture construction for isolated capability probes."""
+"""Isolated CLI execution, session lifecycle, and evidence reporting."""
 
 import json
 import os
 from pathlib import Path
-import secrets
 import shutil
 import subprocess
 import uuid
 
 from .conversation import load_conversation
-from .plugin_install import install_codex
 from .harness_session import session_claude, session_codex, session_cursor
 
 REPO = Path(__file__).resolve().parents[2]
@@ -17,33 +15,6 @@ REPO = Path(__file__).resolve().parents[2]
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value))
-
-
-def plugin_fixture(root, harness):
-    market = root / "fixture"
-    plugin = market / "metadata-fixture"
-    write_json(plugin / f".{harness}-plugin/plugin.json", {
-        "name": "metadata-fixture", "version": "0.0.1",
-        "description": "Skill metadata capability fixture.",
-    })
-    if harness == "codex":
-        write_json(market / ".agents/plugins/marketplace.json", {
-            "name": "metadata-market", "plugins": [{
-                "name": "metadata-fixture",
-                "source": {"source": "local", "path": "./metadata-fixture"},
-                "description": "Skill metadata capability fixture.",
-            }],
-        })
-    return market, plugin
-
-
-def fixture(root, harness, name, description, body_text):
-    market, plugin = plugin_fixture(root, harness)
-    skill = plugin / "skills" / name / "SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text(f"---\nname: {name}\ndescription: {description}\n---\n"
-                     f"{body_text}\n")
-    return market, plugin
 
 
 def credentials(harness):
@@ -69,10 +40,6 @@ class HarnessRun:
         self.env.pop("ISOLATED_CURSOR_ALLOW_ACCOUNT_PLUGINS", None)
         self.env.pop("ISOLATED_CLAUDE_ENV", None)
         self.env[f"ISOLATED_{harness.upper()}_AUTH"] = str(auth)
-        self.name = "metadata-probe-" + secrets.token_hex(8)
-        self.description_token = "DESCRIPTION-" + secrets.token_hex(16)
-        self.body_token = "BODY-" + secrets.token_hex(16)
-        self.description = f"Inert capability fixture. Description marker {self.description_token}."
         self.report = {"harness": harness, "model": self.resolved_model, "cases": {}}
 
     @property
@@ -95,24 +62,9 @@ class HarnessRun:
     def start(self, prompt, *, live):
         if not live:
             self.report["model"] = None
-        self.report.update({"prompt": prompt, "name": self.name, "description": self.description,
-                            "loading": "local marketplace install" if self.harness == "codex" else "--plugin-dir"})
+        self.report["prompt"] = prompt
         self.report["version"] = self.command("version", ["--version"], self.root / "version-probe").strip()
         self.save()
-
-    def make_fixture(self, body_text):
-        self.market, self.plugin = fixture(self.root, self.harness, self.name, self.description, body_text)
-
-    def replace_body(self, body_text):
-        skill = self.plugin / "skills" / self.name / "SKILL.md"
-        skill.write_text(f"---\nname: {self.name}\ndescription: {self.description}\n---\n{body_text}\n")
-
-    def install_fixture(self, case):
-        """Prepare the fixture and return any required session directory override."""
-        if self.harness == "codex":
-            install_codex(self, case, self.market, self.plugin, "metadata-market")
-            return None
-        return self.plugin
 
     def session(self, case, prompt, *, plugin_dir=None, trust_hooks=False, writable=False):
         self.report["writable"] = writable
@@ -130,6 +82,4 @@ class HarnessRun:
         self.save()
 
     def save(self):
-        # The body token must not be exposed in pre-session metadata.
         write_json(self.root / "results.json", self.report)
-

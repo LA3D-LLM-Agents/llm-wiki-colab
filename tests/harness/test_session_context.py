@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from .plugin_install import install_fixture
 from .session_evidence import load_session_evidence
 from .session_context import TOKEN, make_session_fixture, session_evidence
 from .skill_assertions import audit_messages
@@ -19,8 +20,8 @@ def test_session_context(harness, harness_run):
     run = harness_run
     run.start(PROMPT, live=True)
     for case, emit in (("context_absent", False), ("context_present", True)):
-        capture = make_session_fixture(run, case, emit=emit)
-        plugin_dir = run.install_fixture(case)
+        plugin, capture = make_session_fixture(run, case, emit=emit)
+        plugin_dir = install_fixture(run, case, plugin)
         output, conversation = run.session(case, PROMPT, plugin_dir=plugin_dir, trust_hooks=harness == "codex")
         assert capture.is_file(), "session-start hook did not execute"
         captured = json.loads(capture.read_text())
@@ -39,8 +40,8 @@ def test_session_context_requires_codex_hook_trust(harness, harness_run):
     run = harness_run
     run.start(PROMPT, live=True)
     case = "default_trust"
-    capture = make_session_fixture(run, case, emit=True)
-    plugin_dir = run.install_fixture(case)
+    plugin, capture = make_session_fixture(run, case, emit=True)
+    plugin_dir = install_fixture(run, case, plugin)
     output, conversation = run.session(case, PROMPT, plugin_dir=plugin_dir)
     audit_messages(conversation)
     assert output.strip(), "empty model response"
