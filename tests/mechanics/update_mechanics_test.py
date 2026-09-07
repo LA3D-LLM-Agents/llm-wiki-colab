@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """update_wiki fast-forward mechanics: clean-FF, dirty gate, divergence, guard.
 
-Exercises ensure_wiki.update_wiki directly against real git (and real jj, when
-available), so it bypasses the GitHub-only URL gate and the SessionStart
-plumbing. Usage: update_mechanics_test.py <path-to-ensure-wiki.py>
+Exercises the update stage directly against real git (and real jj, when
+available). Usage: update_mechanics_test.py <path-to-20-update-wiki.py>
 
 Each check is built to discriminate (observe-the-failure): the happy path
 asserts HEAD actually moved from a known-behind state to the upstream tip; the
@@ -18,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 hook_path = sys.argv[1]
@@ -94,7 +94,7 @@ with tempfile.TemporaryDirectory() as td:
     advance(seed, bare, "B")
     check("git happy: precondition — clone is behind upstream", head(wiki) != tip(bare))
     r = ew.update_wiki(wiki)
-    check("git happy: returns None (silent)", r is None)
+    check("git happy: reports refreshed memory", "refresh complete" in r)
     check("git happy: HEAD advanced to upstream tip", head(wiki) == tip(bare))
 
     # ---- GIT: already up to date -> no-op, silent ----
@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory() as td:
     git("clone", "-q", str(bare), str(wiki))
     before = head(wiki)
     r = ew.update_wiki(wiki)
-    check("git uptodate: returns None", r is None)
+    check("git uptodate: reports refreshed memory", "refresh complete" in r)
     check("git uptodate: HEAD unchanged", head(wiki) == before)
 
     # ---- GIT: dirty (untracked) + behind -> gate blocks the FF ----
@@ -116,11 +116,11 @@ with tempfile.TemporaryDirectory() as td:
     (wiki / "scratch.md").write_text("wip\n")
     before = head(wiki)
     r = ew.update_wiki(wiki)
-    check("git dirty: returns None", r is None)
+    check("git dirty: reports preserved local changes", "local changes preserved" in r)
     check("git dirty: HEAD NOT advanced while dirty", head(wiki) == before)
     (wiki / "scratch.md").unlink()
     r2 = ew.update_wiki(wiki)
-    check("git dirty: contrast — advances once clean", head(wiki) == tip(bare) and r2 is None)
+    check("git dirty: contrast — advances once clean", head(wiki) == tip(bare) and "refresh complete" in r2)
 
     # ---- GIT: dirty (modified tracked, uncommitted) -> blocked, edit kept ----
     bare, seed = make_upstream(base, "g_edit")
@@ -130,7 +130,7 @@ with tempfile.TemporaryDirectory() as td:
     (wiki / "index.md").write_text("A\nLOCAL\n")
     before = head(wiki)
     r = ew.update_wiki(wiki)
-    check("git tracked-edit: returns None", r is None)
+    check("git tracked-edit: reports preserved local changes", "local changes preserved" in r)
     check("git tracked-edit: HEAD NOT advanced", head(wiki) == before)
     check("git tracked-edit: local edit preserved", (wiki / "index.md").read_text() == "A\nLOCAL\n")
 
@@ -147,6 +147,30 @@ with tempfile.TemporaryDirectory() as td:
     check("git diverged: returns a nudge message", bool(r))
     check("git diverged: HEAD not moved to upstream tip", head(wiki) != tip(bare))
     check("git diverged: HEAD still at the local commit", head(wiki) == local_head)
+
+    # Failed network operations must report stale local memory and never merge.
+    bare, seed = make_upstream(base, "g_failure")
+    wiki = base / "g_failure.wiki"
+    git("clone", "-q", str(bare), str(wiki))
+    before = head(wiki)
+    real_run = subprocess.run
+    for operation in ("fetch", "remote"):
+        if operation == "remote":
+            git("-C", str(wiki), "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+        calls = []
+        def timed_out(argv, **kwargs):
+            calls.append(argv[3:])
+            if argv[3:4] == [operation] and (operation != "remote" or argv[4:5] == ["show"]):
+                check("network timeout is bounded", kwargs["timeout"] == ew.UPDATE_TIMEOUT_SECONDS)
+                check("network is noninteractive", kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+                      and "BatchMode=yes" in kwargs["env"]["GIT_SSH_COMMAND"])
+                raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+            return real_run(argv, **kwargs)
+        with patch.object(ew.subprocess, "run", side_effect=timed_out):
+            result = ew.update_wiki(wiki)
+        check(f"{operation} timeout: reports unknown freshness", "Remote freshness is unknown" in result)
+        check(f"{operation} timeout: never merges", not any(c[0] == "merge" for c in calls))
+        check(f"{operation} timeout: preserves HEAD", head(wiki) == before)
 
     # ---- GIT: wiki dir is NOT its own repo root -> guard bails, parent safe ----
     # The parent is itself a CLEAN clone that is behind its own upstream, with a
@@ -194,7 +218,7 @@ with tempfile.TemporaryDirectory() as td:
         advance(seed, bare, "B")
         check("jj happy: precondition — clone is behind upstream", head(wiki) != tip(bare))
         r = ew.update_wiki(wiki)
-        check("jj happy: returns None", r is None)
+        check("jj happy: reports refreshed memory", "refresh complete" in r)
         check("jj happy: HEAD advanced to upstream tip", head(wiki) == tip(bare))
 
         # The case git status must catch but jj has NOT snapshotted: a tracked
@@ -206,7 +230,7 @@ with tempfile.TemporaryDirectory() as td:
         (wiki / "index.md").write_text("A\nUNSNAPSHOTTED\n")  # no jj command after
         before = head(wiki)
         r = ew.update_wiki(wiki)
-        check("jj unsnapshotted-edit: returns None", r is None)
+        check("jj unsnapshotted-edit: reports preserved local changes", "local changes preserved" in r)
         check("jj unsnapshotted-edit: HEAD NOT advanced", head(wiki) == before)
         check("jj unsnapshotted-edit: on-disk edit preserved",
               (wiki / "index.md").read_text() == "A\nUNSNAPSHOTTED\n")

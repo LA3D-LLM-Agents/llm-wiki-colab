@@ -14,14 +14,14 @@ for f in \
     core/agents/verification-gate.md \
     core/agents/discipline-gates.md \
     core/templates/guidance.md \
-    hooks/ensure-wiki.py \
-    hooks/session-start.sh \
+    hooks/session-start.d/10-check-attachment.py \
+    hooks/session-start.d/20-update-wiki.py \
+    hooks/session-start.d/30-build-orientation.py \
+    hooks/session-start.py \
     hooks/posttooluse.sh \
     hooks/hooks.json \
     .claude-plugin/plugin.json \
     skills/wiki-init/SKILL.md \
-    skills/wiki-doctor/SKILL.md \
-    skills/wiki-doctor/scripts/wiki-doctor.sh \
     skills/wiki-ask/SKILL.md \
     skills/wiki-ask/scripts/ask.sh \
     skills/wiki-enroll/SKILL.md \

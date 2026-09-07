@@ -150,6 +150,37 @@ This tests installed-plugin orientation delivery, not the separate question of
 whether orientation changes behavior. It does not test the user-visible banner,
 wiki fetching, remote marketplace publishing, or Cursor account-side installation.
 
+`test_plugin_startup.py` extends this to the shipped session-start coordinator
+and its numbered stages. It installs the unchanged artifact on each harness and
+runs six independent scenarios:
+
+- A clean wiki behind a local Git remote must advance to the remote commit, and
+  the model must receive the new index marker rather than the old one. This
+  verifies updating before reading orientation through the installed hook.
+- A diverged wiki must fetch the remote tip while preserving local HEAD and a
+  clean working tree. Its reconciliation warning and local orientation must
+  reach incoming context and be recovered by the model, including through Cursor.
+- A dirty wiki must skip fetching, preserve the unfinished file and local HEAD,
+  and deliver local orientation with an explicit refresh-skipped warning.
+- A missing remote target must fail fetching without changing the checkout;
+  the model must receive local memory and an unknown-freshness warning.
+- A wiki without origin must retain local memory and report the missing remote.
+- An ordinary `.llm-wiki` directory inside the project repository must produce an
+  invalid-attachment diagnostic and no wiki orientation or editing instructions.
+
+```sh
+uv run --with pytest python -B -m pytest tests/harness/test_plugin_startup.py \
+  --run-live --keep -s -ra
+```
+
+The fixtures use local bare Git remotes; they do not test network availability or
+remote authentication. No hook is called by the test or substituted in the
+artifact. Random markers stay out of prompts, and tool audits reject file reads.
+The remote and checkout commits are recorded with context-delivery evidence.
+Codex uses the same explicit hook-trust bypass as the orientation integration;
+this does not establish default-trust behavior. Offline startup audit tests
+reject stale state, assistant-only warnings, and orientation after failed validation.
+
 `test_plugin_advisory.py` installs the unchanged built plugin and tests both page
 creation and updates on Claude, Codex, and Cursor. Each operation first writes a
 non-wiki Markdown target, then a wiki target in a fresh harness home. Both run in
@@ -259,6 +290,9 @@ termination can leave scratch data behind.
 - `plugin_orientation.py`, `test_plugin_orientation.py`: seeded wiki and built-plugin
   orientation integration across the three harnesses.
 - `test_plugin_orientation_audit.py`: offline orientation contract checks.
+- `plugin_startup.py`, `test_plugin_startup.py`: installed startup stage sequencing,
+  local remote updates, refresh warnings, and invalid attachment controls.
+- `test_plugin_startup_audit.py`: offline startup evidence rejection checks.
 - `plugin_advisory.py`, `test_plugin_advisory.py`: built-plugin create/update
   reminder delivery and non-wiki controls across the three harnesses.
 - `test_plugin_advisory_audit.py`: offline reminder delivery and contamination checks.

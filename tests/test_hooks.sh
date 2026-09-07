@@ -3,19 +3,19 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/lib/assert.sh"
-require_env PLUGIN_ROOT
+require_env PLUGIN_ROOT CODEX_PLUGIN_ROOT CURSOR_PLUGIN_ROOT
 HOOKS="$PLUGIN_ROOT/hooks"
 
 # 1. SessionStart is silent when the repo has not opted in (no .llm-wiki/).
 d="$(mk_scratch https://github.com/foo/bar.git)"
-out="$(cd "$d" && bash "$HOOKS/session-start.sh")"
+out="$(cd "$d" && python3 "$HOOKS/session-start.py")"
 assert_empty "$out" "SessionStart silent without .llm-wiki (opt-in contract)"
 
 # 2. With .llm-wiki/ and 7 log entries: orientation + index + exactly the last 5.
-mkdir -p "$d/.llm-wiki"
+git init -q "$d/.llm-wiki"
 printf '# Index\n- page Alpha\n' > "$d/.llm-wiki/index_bar.md"
 { echo "# Log"; for n in 1 2 3 4 5 6 7; do echo "## [2026-07-0$n] e | E$n"; echo "- body"; done; } > "$d/.llm-wiki/log_bar.md"
-out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$HOOKS/session-start.sh")"
+out="$(cd "$d" && CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" python3 "$HOOKS/session-start.py")"
 # Output must be a single valid JSON object (plain stdout would be ignored by CC).
 printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null \
     && _pass "SessionStart emits a single valid JSON object" \
@@ -30,6 +30,54 @@ assert_contains "$out" "page Alpha" "index folded into additionalContext"
 assert_contains "$out" "E7" "last-5 includes newest entry"
 assert_not_contains "$out" "| E2" "last-5 excludes the 6th-newest and older"
 rm -rf "$d"
+
+# Missing jq must reach model context on every emitted platform without losing
+# orientation. Use a real PATH without jq, including for the Cursor child hook.
+if python3 - <<'PYTEST'
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+
+with tempfile.TemporaryDirectory() as scratch:
+    root = Path(scratch)
+    bin_dir = root / "bin"
+    bin_dir.mkdir()
+    for name in ("bash", "python3", "git", "basename", "find", "wc", "tr", "grep", "cat", "awk"):
+        (bin_dir / name).symlink_to(shutil.which(name))
+    workspace = root / "project"
+    workspace.mkdir()
+    env = dict(os.environ, PATH=str(bin_dir), CURSOR_PROJECT_DIR=str(workspace))
+    for platform, variable in (("claude", "PLUGIN_ROOT"), ("codex", "CODEX_PLUGIN_ROOT"), ("cursor", "CURSOR_PLUGIN_ROOT")):
+        plugin = os.environ[variable]
+        env["CLAUDE_PLUGIN_ROOT"] = plugin
+        command = [str(bin_dir / "python3"), plugin + "/hooks/session-start.py"]
+        if platform == "cursor":
+            command = [str(bin_dir / "bash"), plugin + "/hooks/cursor-session-start.sh", plugin]
+        def run():
+            return subprocess.run(command, cwd=workspace, env=env, input="{}", text=True, capture_output=True, check=True).stdout
+        unattached = run()
+        assert not unattached.strip() or json.loads(unattached)["additional_context"] == "", platform
+        wiki = workspace / ".llm-wiki"
+        subprocess.run(["git", "init", "-q", str(wiki)], check=True)
+        (wiki / "index_project.md").write_text("# Index\n- Missing jq test page\n")
+        (wiki / "log_project.md").write_text("## [2026-09-07] test\n")
+        result = json.loads(run())
+        context = result["additional_context"] if platform == "cursor" else result["hookSpecificOutput"]["additionalContext"]
+        assert "jq not found on PATH" in context, platform
+        assert "verification reminders" in context, platform
+        assert "Missing jq test page" in context, platform
+        if platform != "cursor":
+            assert "jq not found on PATH" in result["systemMessage"], platform
+        shutil.rmtree(wiki)
+PYTEST
+then
+    _pass "missing jq: warning and orientation delivered on all platforms; unattached repos stay silent"
+else
+    _fail "missing jq session-start behavior"
+fi
 
 # 3. PostToolUse fires on a .llm-wiki/ write, stays silent otherwise.
 out="$(printf '{"tool_input":{"file_path":".llm-wiki/Foo.md"}}' | bash "$HOOKS/posttooluse.sh")"
@@ -86,7 +134,7 @@ assert_empty "$out" "PostToolUse silent on a payload with no tool_input"
 #    Points at a real wiki-bearing repo; the opt-in hook returns before any
 #    network, so this is deterministic and offline. Attaching is /wiki-init's job.
 d="$(mk_scratch https://github.com/chrissweet/llm-wiki-vision.git)"
-out="$(cd "$d" && python3 "$HOOKS/ensure-wiki.py" 2>/dev/null)"
+out="$(cd "$d" && python3 "$HOOKS/session-start.py" 2>/dev/null)"
 assert_empty "$out" "ensure-wiki silent when .llm-wiki absent (no auto-clone even if a GitHub wiki exists)"
 assert_no_file "$d/.llm-wiki" "ensure-wiki does not attach; that is /wiki-init's job"
 rm -rf "$d"

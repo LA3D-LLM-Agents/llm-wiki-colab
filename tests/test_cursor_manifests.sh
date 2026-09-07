@@ -157,7 +157,7 @@ fi
 # --- the pre-tool-use adapter, driven directly ------------------------------
 # A fabricated preToolUse payload through the emitted script, so the rewrite is
 # checked against the file that ships rather than against the template.
-PRETOOL_IN='{"tool_name":"Shell","tool_input":{"command":"bash \"${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh\"","working_directory":"/project"},"tool_use_id":"t1","hook_event_name":"preToolUse"}'
+PRETOOL_IN='{"tool_name":"Shell","tool_input":{"command":"bash \"${CLAUDE_PLUGIN_ROOT}/tests/root-probe.sh\"","working_directory":"/project"},"tool_use_id":"t1","hook_event_name":"preToolUse"}'
 PRETOOL_OUT="$(printf '%s' "$PRETOOL_IN" | bash "$CURSOR_PRETOOL" "$CURSOR_PLUGIN_ROOT" 2>/dev/null)"
 [ "$(printf '%s' "$PRETOOL_OUT" | jq -r '.permission // "MISSING"' 2>/dev/null)" = "allow" ] \
     && _pass "pre-tool-use adapter allows a Shell command" \
@@ -167,7 +167,7 @@ REWRITTEN_CMD="$(printf '%s' "$PRETOOL_OUT" | jq -r '.updated_input.command // "
 # run by the time the variable exists.
 assert_contains "$REWRITTEN_CMD" "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash" \
     "rewritten command exports the real plugin root before the original command"
-[ "$REWRITTEN_CMD" = "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash \"\${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh\"" ] \
+[ "$REWRITTEN_CMD" = "export CLAUDE_PLUGIN_ROOT=$CURSOR_PLUGIN_ROOT; bash \"\${CLAUDE_PLUGIN_ROOT}/tests/root-probe.sh\"" ] \
     && _pass "rewritten command preserves the original command byte-for-byte after the prefix" \
     || _fail "rewritten command mangled the original command: $REWRITTEN_CMD"
 # tool_input is replaced wholesale, not merged, so a dropped field is a lost
@@ -202,32 +202,32 @@ printf '%s' "$PRETOOL_IN" | env -u CLAUDE_PLUGIN_ROOT -u CURSOR_PLUGIN_ROOT bash
     || _fail "pre-tool-use adapter exits non-zero with no plugin root, which Cursor reads as a block"
 
 # --- skills ----------------------------------------------------------------
-# Structural parity of the seven skills, and the two universal frontmatter keys
+# Structural parity of the six skills, and the two universal frontmatter keys
 # every harness reads.
-for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
+for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
     f="$CURSOR_PLUGIN_ROOT/skills/$s/SKILL.md"
     assert_file "$f" "cursor subtree ships skill $s"
     assert_grep_file "$f" "name: $s" "cursor skill $s declares its name"
     assert_grep_file "$f" "description:" "cursor skill $s declares a description"
 done
 CURSOR_SKILLS="$(find "$CURSOR_PLUGIN_ROOT/skills" -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')"
-[ "$CURSOR_SKILLS" = "7" ] \
-    && _pass "cursor subtree ships exactly 7 skills" \
-    || _fail "cursor subtree ships $CURSOR_SKILLS skills, expected 7"
+[ "$CURSOR_SKILLS" = "6" ] \
+    && _pass "cursor subtree ships exactly 6 skills" \
+    || _fail "cursor subtree ships $CURSOR_SKILLS skills, expected 6"
 
 # Frontmatter routing, both directions. On Cursor the key is not merely inert:
 # a skill carrying disable-model-invocation is suppressed entirely, neither
 # listed nor invocable (probed by mutation, cursor-agent 2026.08.11). Dropping
-# it from the Claude tree would silently make four user-only skills
+# it from the Claude tree would silently make three user-only skills
 # model-invocable there, so both counts are asserted.
 CURSOR_DMI="$(cat "$CURSOR_PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | grep -c 'disable-model-invocation')"
 CLAUDE_DMI="$(cat "$PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | grep -c 'disable-model-invocation')"
 [ "$CURSOR_DMI" = "0" ] \
     && _pass "cursor skills carry no disable-model-invocation (stripped)" \
     || _fail "cursor skills still carry $CURSOR_DMI disable-model-invocation lines"
-[ "$CLAUDE_DMI" = "4" ] \
-    && _pass "claude skills carry exactly 4 disable-model-invocation lines" \
-    || _fail "claude skills carry $CLAUDE_DMI disable-model-invocation lines, expected 4"
+[ "$CLAUDE_DMI" = "3" ] \
+    && _pass "claude skills carry exactly 3 disable-model-invocation lines" \
+    || _fail "claude skills carry $CLAUDE_DMI disable-model-invocation lines, expected 3"
 
 # Skill bodies. Frontmatter is routed per harness, but everything below the
 # closing fence is one text with one meaning, and the preToolUse hook puts
@@ -235,7 +235,7 @@ CLAUDE_DMI="$(cat "$PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | grep -c 'disabl
 # the variable resolves on Cursor exactly as it does on Claude. Byte identity is
 # the assertion: any per-harness wording is prose that has to be maintained
 # twice and can only drift.
-for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
+for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
     if cmp -s <(skill_body "$CURSOR_PLUGIN_ROOT/skills/$s/SKILL.md") \
               <(skill_body "$PLUGIN_ROOT/skills/$s/SKILL.md"); then
         _pass "cursor skill $s body is byte-identical to the claude subtree's"
@@ -243,15 +243,9 @@ for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-e
         _fail "cursor skill $s body differs from the claude subtree's"
     fi
 done
-# Both emitted bodies retain the skill-local command from the shared source.
-assert_grep_file "$PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_SKILL_DIR}/scripts/wiki-doctor.sh' \
-    "claude wiki-doctor uses its skill-local script"
-assert_grep_file "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_SKILL_DIR}/scripts/wiki-doctor.sh' \
-    "cursor wiki-doctor retains the shared skill-local command"
-
 # --- shared runtime --------------------------------------------------------
 # The shared hooks remain identical; adapters translate the harness protocols.
-for f in hooks/posttooluse.sh hooks/session-start.sh hooks/ensure-wiki.py; do
+for f in hooks/posttooluse.sh hooks/session-start.py hooks/session-start.d/10-check-attachment.py hooks/session-start.d/20-update-wiki.py hooks/session-start.d/30-build-orientation.py; do
     if cmp -s "$PLUGIN_ROOT/$f" "$CURSOR_PLUGIN_ROOT/$f"; then
         _pass "$f is byte-identical in the claude and cursor subtrees"
     else
@@ -269,19 +263,6 @@ assert_empty "$CORE_DIFF" "core/ is identical in the claude and cursor subtrees$
 SYMLINKS="$(find "$MARKETPLACE_TREE" -type l 2>/dev/null)"
 assert_empty "$SYMLINKS" "no symlink anywhere in the assembled output${SYMLINKS:+ (found: $SYMLINKS)}"
 
-# --- the doctor, against the real cursor subtree ---------------------------
-# test_doctor.sh exercises the dialect branch against a shaped fixture because
-# it must pass before this subtree exists. This is the same check against what
-# actually ships, invoked the way a Cursor agent would: absolute path, and no
-# plugin-root variable in the environment.
-d="$(mk_scratch https://github.com/foo/bar.git)"
-( cd "$d" && bash "$CURSOR_PLUGIN_ROOT/skills/wiki-init/scripts/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
-dout="$( cd "$d" && env -u CLAUDE_PLUGIN_ROOT bash "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/scripts/wiki-doctor.sh" 2>&1 )"
-assert_contains "$dout" "cursor dialect"        "doctor reads the emitted cursor subtree as cursor dialect"
-assert_contains "$dout" "orientation dry-run emits" "doctor's dry-run reaches orientation through the adapter"
-assert_contains "$dout" "structural failures: 0"    "emitted cursor subtree passes the doctor cleanly"
-rm -rf "$d"
-
 # Every assertion above was watched fail before it was written down. Against a
 # mutated copy of the built tree, one per failure class: a period in the catalog
 # name, a renamed plugin manifest, a source pointing at claude/, the description
@@ -289,7 +270,7 @@ rm -rf "$d"
 # hooks.json left in Claude dialect, either adapter's argv[1] dropped, an
 # adapter non-executable, an adapter deleted, disable-model-invocation restored
 # on a cursor skill and stripped from the Claude ones, core/ and
-# hooks/session-start.sh drifted, a real file replaced by a symlink, a skill
+# hooks/session-start.py drifted, a real file replaced by a symlink, a skill
 # deleted, and the hooks schema version removed.
 # The preToolUse half was reddened the same way: the matcher dropped, the whole
 # entry deleted, the command pointed at the sessionStart script, the script
@@ -354,7 +335,7 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
 
     # Load proof first. If the plugin did not install at all, the marker
     # assertion below would fail too and say nothing about why.
-    assert_contains "$SMOKE_OUT" "wiki-doctor" \
+    assert_contains "$SMOKE_OUT" "wiki-lint" \
         "cursor-agent lists a wiki skill from the installed plugin"
     assert_contains "$SMOKE_OUT" "wiki-init" \
         "cursor-agent lists wiki-init, which carries disable-model-invocation at the source"
@@ -368,69 +349,51 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
     # the plugin root reaches the shell the model runs a skill's commands in,
     # which is a different process and a different mechanism.
     #
-    # wiki-doctor is the probe because its body runs
-    # bash "${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh" and the script
-    # reports where it resolved its root from. The prompt forbids substituting
-    # the variable: left to itself the model helpfully rewrites it to a literal
-    # path or a ${VAR:-fallback}, which would make the run pass whether or not
-    # the export arrived.
-    #
-    # --force is not optional. With --trust alone every shell call in a headless
-    # session comes back `rejected` with an empty reason, including a bare cat.
-    DOCTOR_PROMPT='Use the wiki-doctor skill. Run the command in its body exactly as written, character for character, with no substitutions, no fallbacks and no extra environment assignments. Then report the script output verbatim.'
+    # Test-only probe: verify the export in the actual agent shell.
+    mkdir -p "$SMOKE_DIR/tests"
+    cat > "$SMOKE_DIR/tests/root-probe.sh" <<'PROBE'
+#!/usr/bin/env bash
+test -f "$CLAUDE_PLUGIN_ROOT/.cursor-plugin/plugin.json" || exit 1
+printf 'ROOT-PROBE from CLAUDE_PLUGIN_ROOT\n'
+PROBE
+    PROBE_PROMPT='Run exactly: bash "${CLAUDE_PLUGIN_ROOT}/tests/root-probe.sh". Do not substitute the variable, add environment assignments, or use fallbacks. Report its output verbatim.'
     # stdout only: the trace has to stay parseable JSONL for jq.
-    DOCTOR_TRACE="$(cursor-agent -p --trust --force --workspace "$SMOKE_FIX" \
-        --output-format stream-json "$DOCTOR_PROMPT" 2>/dev/null)"
+    PROBE_TRACE="$(cursor-agent -p --trust --force --workspace "$SMOKE_FIX" \
+        --output-format stream-json "$PROBE_PROMPT" 2>/dev/null)"
     # `success` and `failure` are two shapes of the same record; taking both
     # means a 127 arrives as a reported exit code and a message rather than as
     # an empty variable that fails every assertion for no stated reason.
-    DOCTOR_CALL="$(printf '%s' "$DOCTOR_TRACE" \
+    PROBE_CALL="$(printf '%s' "$PROBE_TRACE" \
         | jq -c 'select(.type == "tool_call" and .subtype == "completed")
                  | .tool_call.shellToolCall.result
                  | (.success // .failure)
-                 | select(. != null) | select(.command | contains("wiki-doctor"))' \
+                 | select(. != null) | select(.command | contains("root-probe"))' \
           2>/dev/null | head -1)"
-    DOCTOR_CMD="$(printf '%s' "$DOCTOR_CALL" | jq -r '.command // ""' 2>/dev/null)"
-    DOCTOR_RC="$(printf '%s' "$DOCTOR_CALL" | jq -r '.exitCode // "MISSING"' 2>/dev/null)"
-    DOCTOR_STDOUT="$(printf '%s' "$DOCTOR_CALL" | jq -r '.stdout // ""' 2>/dev/null)"
-    DOCTOR_BOTH="$(printf '%s' "$DOCTOR_CALL" | jq -r '(.stdout // "") + (.stderr // "")' 2>/dev/null)"
+    PROBE_CMD="$(printf '%s' "$PROBE_CALL" | jq -r '.command // ""' 2>/dev/null)"
+    PROBE_RC="$(printf '%s' "$PROBE_CALL" | jq -r '.exitCode // "MISSING"' 2>/dev/null)"
+    PROBE_STDOUT="$(printf '%s' "$PROBE_CALL" | jq -r '.stdout // ""' 2>/dev/null)"
+    PROBE_BOTH="$(printf '%s' "$PROBE_CALL" | jq -r '(.stdout // "") + (.stderr // "")' 2>/dev/null)"
 
     # The command as the agent submitted it. A successful shell call is recorded
     # pre-rewrite, so the export prefix itself is not visible here (it shows up
     # only in a `rejected` record, which reports what would have run). What is
     # visible is stronger anyway: the variable reaches the shell unexpanded, so
     # the run below can only work if something set it.
-    assert_contains "$DOCTOR_CMD" '${CLAUDE_PLUGIN_ROOT}/skills/wiki-doctor/scripts/wiki-doctor.sh' \
-        "the agent ran the skill body's command with the variable unexpanded"
-    assert_not_contains "$DOCTOR_CMD" 'CLAUDE_PLUGIN_ROOT=' \
+    assert_contains "$PROBE_CMD" '${CLAUDE_PLUGIN_ROOT}/tests/root-probe.sh' \
+        "the agent ran the probe command with the variable unexpanded"
+    assert_not_contains "$PROBE_CMD" 'CLAUDE_PLUGIN_ROOT=' \
         "the agent set no plugin root of its own in the command"
 
-    # Without the export this is exit 127 on bash "/skills/wiki-doctor/scripts/wiki-doctor.sh".
-    [ "$DOCTOR_RC" = "0" ] \
-        && _pass "wiki-doctor exited 0 in the agent's shell" \
-        || _fail "wiki-doctor exited $DOCTOR_RC in the agent's shell (127 = the plugin root never arrived)"
+    # Without the export this is exit 127 on bash "/tests/root-probe.sh".
+    [ "$PROBE_RC" = "0" ] \
+        && _pass "root probe exited 0 in the agent's shell" \
+        || _fail "root probe exited $PROBE_RC in the agent's shell (127 = the plugin root never arrived)"
     # stderr as well as stdout: an unresolved root reports itself as
-    # `bash: /skills/wiki-doctor/scripts/wiki-doctor.sh: No such file or directory`, on stderr.
-    assert_not_contains "$DOCTOR_BOTH" "No such file" \
-        "wiki-doctor's output carries no missing-file error"
-    assert_contains "$DOCTOR_STDOUT" "llm-wiki doctor" \
-        "wiki-doctor really executed (its banner is in the shell output)"
-    assert_contains "$DOCTOR_STDOUT" "structural failures: 0" \
-        "wiki-doctor passed cleanly against the installed cursor plugin"
-    # The decisive line. wiki-doctor falls back to its own location when the
-    # variable is unset and says so, so "from CLAUDE_PLUGIN_ROOT" means the
-    # preToolUse rewrite put it in that shell's environment.
-    assert_contains "$DOCTOR_STDOUT" "from CLAUDE_PLUGIN_ROOT" \
-        "wiki-doctor resolved its root from the exported variable, not its own location"
-
-    # Watched red against a live cursor-agent, not by inspection: the same run
-    # with the preToolUse entry removed from the installed hooks.json and
-    # nothing else changed came back
-    #   exitCode 127
-    #   bash: /skills/wiki-doctor/scripts/wiki-doctor.sh: No such file or directory
-    # which reddens the exit-code, No-such-file, banner, structural-failures and
-    # from-CLAUDE_PLUGIN_ROOT assertions together. The command the agent
-    # submitted was byte-identical in both runs, so the difference is the hook.
+    # `bash: /tests/root-probe.sh: No such file or directory`, on stderr.
+    assert_not_contains "$PROBE_BOTH" "No such file" \
+        "root probe's output carries no missing-file error"
+    assert_contains "$PROBE_STDOUT" "from CLAUDE_PLUGIN_ROOT" \
+        "root probe resolved its root from the exported variable, not its own location"
 
     smoke_cleanup
     trap - EXIT INT TERM

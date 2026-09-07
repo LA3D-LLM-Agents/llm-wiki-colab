@@ -39,6 +39,6 @@ Return the agent's answer, attributed to the agent id.
 
 ## Notes
 
-- Requires `git`, `jq`, `curl`, and an LLM CLI (`claude` by default; override with the `LLM_CLI` env var). Run `/wiki-doctor` to check the deps.
+- Requires `git`, `jq`, `curl`, and an LLM CLI (`claude` by default; override with the `LLM_CLI` env var).
 - `ask.sh` invokes `claude -p`, billed against `ANTHROPIC_API_KEY`. If that key is over its quota, prefix with `env -u ANTHROPIC_API_KEY` to fall back to the claude.ai login.
 - This is `ask`-only; the async `message` / `post` modes are not part of it.

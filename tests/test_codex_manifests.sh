@@ -116,33 +116,36 @@ assert_empty "$STRAY_MANIFESTS" "no nested .claude-plugin anywhere under the cod
 
 # Frontmatter routing, both directions. Codex ignores disable-model-invocation,
 # so leaving it in is inert but proves the strip never ran; dropping it from the
-# Claude tree would silently make four user-only skills model-invocable.
+# Claude tree would silently make three user-only skills model-invocable.
 CODEX_DMI="$(cat "$CODEX_PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | grep -c 'disable-model-invocation')"
 CLAUDE_DMI="$(cat "$PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | grep -c 'disable-model-invocation')"
 [ "$CODEX_DMI" = "0" ] \
     && _pass "codex skills carry no disable-model-invocation (stripped)" \
     || _fail "codex skills still carry $CODEX_DMI disable-model-invocation lines"
-[ "$CLAUDE_DMI" = "4" ] \
-    && _pass "claude skills carry exactly 4 disable-model-invocation lines" \
-    || _fail "claude skills carry $CLAUDE_DMI disable-model-invocation lines, expected 4"
+[ "$CLAUDE_DMI" = "3" ] \
+    && _pass "claude skills carry exactly 3 disable-model-invocation lines" \
+    || _fail "claude skills carry $CLAUDE_DMI disable-model-invocation lines, expected 3"
 
-# Structural parity of the seven skills, and the two universal frontmatter keys
+# Structural parity of the six skills, and the two universal frontmatter keys
 # every harness reads.
-for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
+for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
     f="$CODEX_PLUGIN_ROOT/skills/$s/SKILL.md"
     assert_file "$f" "codex subtree ships skill $s"
     assert_grep_file "$f" "name: $s" "codex skill $s declares its name"
     assert_grep_file "$f" "description:" "codex skill $s declares a description"
 done
 CODEX_SKILLS="$(find "$CODEX_PLUGIN_ROOT/skills" -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')"
-[ "$CODEX_SKILLS" = "7" ] \
-    && _pass "codex subtree ships exactly 7 skills" \
-    || _fail "codex subtree ships $CODEX_SKILLS skills, expected 7"
+[ "$CODEX_SKILLS" = "6" ] \
+    && _pass "codex subtree ships exactly 6 skills" \
+    || _fail "codex subtree ships $CODEX_SKILLS skills, expected 6"
 assert_no_file "$CODEX_PLUGIN_ROOT/commands" "no commands/ directory in the codex subtree"
+
+CORE_DIFF="$(diff -r "$PLUGIN_ROOT/core" "$CODEX_PLUGIN_ROOT/core" 2>&1)"
+assert_empty "$CORE_DIFF" "core/ is identical in Claude and Codex subtrees"
 
 # The runtime files must be byte-identical across subtrees: one source, two
 # emitters, and every difference is supposed to be a manifest or a SKILL.md.
-for f in hooks/posttooluse.sh hooks/session-start.sh hooks/ensure-wiki.py core/templates/guidance.md; do
+for f in hooks/posttooluse.sh hooks/session-start.py hooks/session-start.d/10-check-attachment.py hooks/session-start.d/20-update-wiki.py hooks/session-start.d/30-build-orientation.py core/templates/guidance.md; do
     if cmp -s "$PLUGIN_ROOT/$f" "$CODEX_PLUGIN_ROOT/$f"; then
         _pass "$f is byte-identical in both subtrees"
     else
@@ -185,7 +188,7 @@ if command -v codex >/dev/null 2>&1; then
         # appears in it namespaced or the model cannot see it.
         PROMPT_SKILLS="$(cd "$CODEX_CWD" && env CODEX_HOME="$CODEX_SCRATCH" \
             codex debug prompt-input 2>/dev/null | grep -o 'llm-wiki:[a-z-]*' | sort -u)"
-        for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
+        for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
             assert_contains "$PROMPT_SKILLS" "llm-wiki:$s" \
                 "codex prompt-input exposes llm-wiki:$s"
         done

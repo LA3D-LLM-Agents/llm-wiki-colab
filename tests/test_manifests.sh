@@ -21,6 +21,10 @@ for j in "$CATALOG" "$PLUGIN_MANIFEST" "$HOOKS_MANIFEST"; do
     fi
 done
 
+assert_no_file "$PLUGIN_ROOT/.codex-plugin" "Claude subtree carries no Codex manifest"
+assert_no_file "$PLUGIN_ROOT/.cursor-plugin" "Claude subtree carries no Cursor manifest"
+assert_no_file "$PLUGIN_ROOT/skills/wiki-doctor" "retired doctor is absent"
+
 # Install identity: these strings are what existing installs are keyed on
 # (docs/repository-model.md: "Neither name may change").
 [ "$(jq -r '.name // "MISSING"' "$PLUGIN_MANIFEST" 2>/dev/null)" = "llm-wiki" ] \

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ported behavioral test: exercises ensure-wiki.py's update_wiki fast-forward
+# Ported behavioral test: exercises 20-update-wiki.py's update_wiki fast-forward
 # mechanics directly (clean-FF, dirty gate, tracked-edit, divergence, guard),
 # from upstream scripts/test/tests/unit/ensure-wiki/update_mechanics_test.py.
 set -uo pipefail
@@ -7,7 +7,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/lib/assert.sh"
 require_env PLUGIN_ROOT
 
-EW="$PLUGIN_ROOT/hooks/ensure-wiki.py"
+EW="$PLUGIN_ROOT/hooks/session-start.d/20-update-wiki.py"
 out="$(python3 "$HERE/mechanics/update_mechanics_test.py" "$EW" 2>&1)"; rc=$?
 npass=$(printf '%s' "$out" | grep -c '\[PASS\]')
 nfail=$(printf '%s' "$out" | grep -c '\[FAIL\]')

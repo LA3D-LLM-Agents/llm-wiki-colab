@@ -45,3 +45,21 @@ A bump is an ordinary source commit on `src`: edit `VERSION`, commit, publish.
 CI runs only deterministic gates: build, validation, and behavior tests.
 CI never gates on model-based evaluation.
 Evaluation runs are operator-driven, since subscription auth is not reliably available in CI, and their results land as data rather than as a pass/fail signal.
+
+## Session-start stages
+
+The manifest registers one `hooks/session-start.py` coordinator. It loads
+`hooks/session-start.d/XX-name.py` files from its installed plugin directory
+in filename order. Each file exports `run(state)` and contributes to the shared
+state rather than printing output. Use distinct two-digit prefixes.
+
+The shipped stages validate attachment (`10`), maintain the checkout (`20`),
+and build orientation (`30`). `state["stop"] = True` stops subsequent stages;
+`warnings` and `context` accumulate strings for the final response. An unexpected
+stage exception stops processing and produces a diagnostic without failing the
+host session. Only the coordinator serializes harness JSON. Cursor's adapter
+resolves the workspace and translates that response, retaining stage warnings.
+
+The coordinator locates resources relative to its own file; it does not depend
+on `CLAUDE_PLUGIN_ROOT`. Checkout updates retain the existing clean-tree and
+fast-forward guards. They run before the index and log are read.

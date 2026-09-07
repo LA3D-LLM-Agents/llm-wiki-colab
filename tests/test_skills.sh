@@ -10,7 +10,7 @@ require_env PLUGIN_ROOT
 
 # name + description are the three-way lowest common denominator; every skill
 # needs both regardless of harness.
-for s in wiki-init wiki-doctor wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
+for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
     f="$PLUGIN_ROOT/skills/$s/SKILL.md"
     assert_file "$f" "skill $s ships"
     assert_grep_file "$f" "name: $s" "skill $s declares its name"
@@ -22,7 +22,7 @@ done
 frontmatter() { sed -n '2,/^---$/p' "$1"; }
 
 # User-only: invoked as /wiki-<name>, never chosen by the model.
-for s in wiki-init wiki-doctor wiki-ask wiki-enroll; do
+for s in wiki-init wiki-ask wiki-enroll; do
     if frontmatter "$PLUGIN_ROOT/skills/$s/SKILL.md" | grep -q 'disable-model-invocation: true'; then
         _pass "skill $s is user-invocable only"
     else

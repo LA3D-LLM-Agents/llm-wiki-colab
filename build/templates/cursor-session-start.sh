@@ -11,10 +11,9 @@
 # What it does, in order:
 #   1. export CLAUDE_PLUGIN_ROOT, which is how the shared hooks find core/.
 #   2. chdir to the workspace root. The hook process starts in the plugin root,
-#      not the workspace, and session-start.sh decides whether this repo has
+#      not the workspace, and session-start.py decides whether this repo has
 #      opted in by testing `.llm-wiki` against $PWD.
-#   3. run ensure-wiki.py, then session-start.sh, the same pair and the same
-#      order Claude's hooks.json wires under SessionStart.
+#   3. run the shared coordinator, which orders the installed stages.
 #   4. translate the Claude-dialect JSON into Cursor's field names.
 #
 # Fail open at every step: sessionStart is fire-and-forget, and a session that
@@ -60,13 +59,8 @@ fi
 [[ -n "$ROOT" ]] || ROOT="$CWD_BEFORE"
 cd "$ROOT" 2>/dev/null || true
 
-# --- run both halves of the Claude SessionStart chain ----------------------
-# ensure-wiki.py first, exactly as hooks.json orders them: it reconciles the
-# wiki checkout before session-start.sh reads it. It emits nothing the model
-# sees, so its output is discarded and its exit status is deliberately ignored.
-printf '%s' "$PAYLOAD" | python3 "$PLUGIN_ROOT/hooks/ensure-wiki.py" >/dev/null 2>&1 || true
-
-RAW="$(printf '%s' "$PAYLOAD" | bash "$PLUGIN_ROOT/hooks/session-start.sh" 2>/dev/null)"
+# Run the shared coordinator and preserve all stage diagnostics.
+RAW="$(printf '%s' "$PAYLOAD" | python3 "$PLUGIN_ROOT/hooks/session-start.py" 2>/dev/null)"
 
 # --- translate Claude dialect -> Cursor dialect ----------------------------
 # systemMessage has no Cursor counterpart and is dropped: Cursor renders no
