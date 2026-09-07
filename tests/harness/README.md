@@ -150,6 +150,27 @@ This tests installed-plugin orientation delivery, not the separate question of
 whether orientation changes behavior. It does not test the user-visible banner,
 wiki fetching, remote marketplace publishing, or Cursor account-side installation.
 
+`test_plugin_advisory.py` installs the unchanged built plugin and tests both page
+creation and updates on Claude, Codex, and Cursor. Each operation first writes a
+non-wiki Markdown target, then a wiki target in a fresh harness home. Both run in
+an opted-in workspace so existing SessionStart guidance cannot stand in for the
+post-write reminder. Claude/Cursor use native Write/Edit; Codex uses apply_patch
+with explicit hook-trust bypass. The file must contain the requested change,
+the complete advisory must reach incoming model context and be quoted back, and
+tool activity is restricted to the target. Non-wiki writes must receive no wiki
+advisory. Plugin code, output format, and hook registration are not substituted.
+
+```sh
+uv run --with pytest python -B -m pytest tests/harness/test_plugin_advisory.py --run-live --keep -s
+```
+
+Missing delivery is a normal test failure, including an unwired Cursor advisory;
+these cases are not skipped or marked xfail. The test does not require the model
+to act on the advice, run verification, maintain the index/log, or commit. Hook
+stdout in diagnostic records alone does not establish model delivery. The
+assertion's expected text is independent of the hook implementation and must be
+reviewed when the product's advisory wording changes.
+
 ## Non-deterministic resource evaluation
 
 `test_resource_resolution.py` is marked `non_deterministic` as well as `live`.
@@ -238,6 +259,9 @@ termination can leave scratch data behind.
 - `plugin_orientation.py`, `test_plugin_orientation.py`: seeded wiki and built-plugin
   orientation integration across the three harnesses.
 - `test_plugin_orientation_audit.py`: offline orientation contract checks.
+- `plugin_advisory.py`, `test_plugin_advisory.py`: built-plugin create/update
+  reminder delivery and non-wiki controls across the three harnesses.
+- `test_plugin_advisory_audit.py`: offline reminder delivery and contamination checks.
 - `resource_resolution.py`, `test_resource_resolution.py`: instrumented resource
   evaluation and model/harness samples.
 - `test_resource_resolution_audit.py`: offline launch-monitor and classifier checks.
