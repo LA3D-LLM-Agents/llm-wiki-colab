@@ -51,6 +51,45 @@ assert_grep_file "$MARKETPLACE_TREE/CITATION.cff" "version: \"$SRC_VERSION\"" \
 assert_grep_file "$MARKETPLACE_TREE/README.md" "Version $SRC_VERSION," \
     "emitted README states the version"
 
+# One description, stamped everywhere. The source manifest carries none, for
+# the same reason it carries no version: the build is the only writer, so the
+# installed plugin and the catalog entry cannot drift apart, and the three
+# harness subtrees describe one product. The expected wording is a reviewed
+# literal rather than a read-back of the build's constant, so rewording is a
+# deliberate two-place edit.
+CLAUDE_DESC="Opt-in per-repo llm-wiki memory for Claude Code: session-start orientation (index + last-5 log) and a verification-gate advisory."
+[ "$(jq -r '.description // "MISSING"' "$PLUGIN_MANIFEST" 2>/dev/null)" = "$CLAUDE_DESC" ] \
+    && _pass "claude plugin manifest carries the stamped description" \
+    || _fail "claude plugin manifest description is not the stamped wording: $(jq -r '.description // "MISSING"' "$PLUGIN_MANIFEST" 2>/dev/null)"
+[ "$(jq -r '.plugins[0].description // "MISSING"' "$CATALOG" 2>/dev/null)" = "$CLAUDE_DESC" ] \
+    && _pass "claude catalog entry carries the same description" \
+    || _fail "claude catalog entry description differs from the plugin manifest"
+
+# The three subtrees differ only in the harness they name.
+for pair in "codex:.codex-plugin:Codex" "cursor:.cursor-plugin:Cursor"; do
+    IFS=: read -r sub manifest_dir label <<< "$pair"
+    other="$(jq -r '.description // "MISSING"' "$MARKETPLACE_TREE/$sub/plugins/llm-wiki/$manifest_dir/plugin.json" 2>/dev/null)"
+    [ "${other/for $label:/for Claude Code:}" = "$CLAUDE_DESC" ] \
+        && _pass "$sub description matches Claude's up to the harness name" \
+        || _fail "$sub description diverges from Claude's: $other"
+done
+
+# The build refuses a source manifest that carries its own description, so a
+# hand edit cannot reintroduce a second writer. Exercised on a scratch copy of
+# the source tree, since assemble.py locates its inputs relative to itself.
+scratch="$(mktemp -d)"
+cp -R "$ROOT/build" "$ROOT/plugins" "$ROOT/VERSION" "$ROOT/CITATION.cff" "$ROOT/LICENSE" "$scratch/"
+rm -rf "$scratch/build/out"
+src_manifest="$scratch/plugins/llm-wiki/.claude-plugin/plugin.json"
+jq '. + {description: "hand-written"}' "$src_manifest" > "$src_manifest.tmp" && mv "$src_manifest.tmp" "$src_manifest"
+if err="$(uv run "$scratch/build/assemble.py" --out "$scratch/out" \
+        --owner-repo o/r --source-ref 0000000000000000000000000000000000000000 2>&1 >/dev/null)"; then
+    _fail "build accepted a source manifest carrying a description"
+else
+    assert_contains "$err" "description" "build refuses a source manifest carrying a description"
+fi
+rm -rf "$scratch"
+
 if command -v claude >/dev/null 2>&1; then
     claude plugin validate "$MARKETPLACE_TREE" >/dev/null 2>&1 && _pass "claude plugin validate: marketplace" || _fail "marketplace validate"
     claude plugin validate "$PLUGIN_ROOT" >/dev/null 2>&1 && _pass "claude plugin validate: plugin" || _fail "plugin validate"

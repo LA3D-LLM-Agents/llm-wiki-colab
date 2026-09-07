@@ -61,6 +61,17 @@ fi
     && _pass "both platform manifests carry version $CODEX_VERSION" \
     || _fail "version drift: claude $CLAUDE_VERSION vs codex $CODEX_VERSION"
 
+# One stamped description: the manifest and the catalog entry must agree, and
+# the wording is the reviewed literal (test_manifests.sh holds Claude's and
+# checks the three differ only in harness name).
+CODEX_DESC="Opt-in per-repo llm-wiki memory for Codex: session-start orientation (index + last-5 log) and a verification-gate advisory."
+[ "$(jq -r '.description // "MISSING"' "$CODEX_MANIFEST" 2>/dev/null)" = "$CODEX_DESC" ] \
+    && _pass "codex plugin manifest carries the stamped description" \
+    || _fail "codex plugin manifest description is not the stamped wording"
+[ "$(jq -r '.plugins[0].description // "MISSING"' "$CODEX_CATALOG" 2>/dev/null)" = "$CODEX_DESC" ] \
+    && _pass "codex catalog entry carries the same description" \
+    || _fail "codex catalog entry description differs from the plugin manifest"
+
 # Anchor to the artifact's own VERSION file, which test_manifests.sh in turn
 # anchors to the repo's. Codex reads this number as a cache directory name, so
 # it is the one field where drift is invisible until users stop getting updates.

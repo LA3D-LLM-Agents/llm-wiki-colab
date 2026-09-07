@@ -63,6 +63,15 @@ assert_contains "$CURSOR_META_DESC" "LLM-wiki" "cursor catalog description lives
     && _pass "cursor catalog carries no root-level description" \
     || _fail "cursor catalog carries a root-level description Cursor does not read"
 
+# One stamped description, same contract as Codex's.
+CURSOR_DESC="Opt-in per-repo llm-wiki memory for Cursor: session-start orientation (index + last-5 log) and a verification-gate advisory."
+[ "$(jq -r '.description // "MISSING"' "$CURSOR_MANIFEST" 2>/dev/null)" = "$CURSOR_DESC" ] \
+    && _pass "cursor plugin manifest carries the stamped description" \
+    || _fail "cursor plugin manifest description is not the stamped wording"
+[ "$(jq -r '.plugins[0].description // "MISSING"' "$CURSOR_CATALOG" 2>/dev/null)" = "$CURSOR_DESC" ] \
+    && _pass "cursor catalog entry carries the same description" \
+    || _fail "cursor catalog entry description differs from the plugin manifest"
+
 # Cursor reads no version, but one build states one number everywhere, so the
 # stamp is anchored to the artifact's own VERSION file exactly like Codex's.
 CURSOR_VERSION="$(jq -r '.version // "MISSING"' "$CURSOR_MANIFEST" 2>/dev/null)"

@@ -1,5 +1,7 @@
 {
   "name": "llm-wiki",
-  "description": "LLM-wiki durable memory for Claude Code: opt-in per-repo wiki (.llm-wiki/) with SessionStart orientation, gates, multi-writer push, and a knowledge-graph build.",
-  "author": { "name": "LA3D-LLM-Agents", "url": "https://github.com/LA3D-LLM-Agents" }
+  "author": {
+    "name": "LA3D-LLM-Agents",
+    "url": "https://github.com/LA3D-LLM-Agents"
+  }
 }

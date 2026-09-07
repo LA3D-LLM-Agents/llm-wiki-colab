@@ -58,6 +58,8 @@ The extraction was proven byte-identical against a pre-change build, comparing b
 `VERSION` at the repository root is the single version of the artifact.
 Every version that ships is stamped from it: the Claude plugin manifest, the Codex plugin manifest, `CITATION.cff`, a `VERSION` file at the artifact root, and the publish commit message.
 No version is written by hand anywhere else, and a source manifest that carries its own version field fails the build.
+The plugin description follows the same rule.
+One template in the build is stamped into every plugin manifest and catalog entry, differing only in the harness it names, and a source manifest that carries its own description field fails the build.
 
 Publishing is gated on a bump.
 A publish whose assembled tree differs from the target branch's current tree, and whose version has not increased over the version that branch already records, is refused.

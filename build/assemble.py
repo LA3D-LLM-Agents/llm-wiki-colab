@@ -30,22 +30,22 @@ PLUGIN_NAME = "llm-wiki"
 MARKETPLACE_DESCRIPTION = (
     "LLM-wiki durable-memory plugins for Claude Code, Codex, and Cursor."
 )
-PLUGIN_DESCRIPTION = (
-    "Opt-in per-repo llm-wiki memory for Claude Code: SessionStart orientation "
+# One description, stamped into every plugin manifest and catalog entry with
+# only the harness name varying. The source manifest carries none, for the same
+# reason it carries no version: the build is the only writer, so the installed
+# plugin and its catalog entry cannot drift, and the three subtrees describe
+# one product.
+PLUGIN_DESCRIPTION_TEMPLATE = (
+    "Opt-in per-repo llm-wiki memory for {harness}: session-start orientation "
     "(index + last-5 log) and a verification-gate advisory."
 )
+PLUGIN_DESCRIPTION = PLUGIN_DESCRIPTION_TEMPLATE.format(harness="Claude Code")
 PLUGIN_SOURCE = "./claude/plugins/llm-wiki"
 CODEX_PLUGIN_SOURCE = "./codex/plugins/llm-wiki"
 CODEX_MARKETPLACE_DISPLAY_NAME = "LLM-wiki Colab"
-CODEX_PLUGIN_DESCRIPTION = (
-    "Opt-in per-repo llm-wiki memory for Codex: SessionStart orientation "
-    "(index + last-5 log) and a verification-gate advisory."
-)
+CODEX_PLUGIN_DESCRIPTION = PLUGIN_DESCRIPTION_TEMPLATE.format(harness="Codex")
 CURSOR_PLUGIN_SOURCE = "./cursor/plugins/llm-wiki"
-CURSOR_PLUGIN_DESCRIPTION = (
-    "Opt-in per-repo llm-wiki memory for Cursor: sessionStart orientation "
-    "(index + last-5 log) and a verification-gate advisory."
-)
+CURSOR_PLUGIN_DESCRIPTION = PLUGIN_DESCRIPTION_TEMPLATE.format(harness="Cursor")
 VERSION_FILE = Path("VERSION")
 # Relative to a plugin directory, not to the repo root: after phase 4 the only
 # manifest that gets read is the emitted one, to stamp it.
@@ -391,22 +391,33 @@ def read_version() -> str:
 
 
 def stamp_claude_plugin_manifest(plugin_dir: Path, version: str) -> None:
-    """Stamp the version into the copied Claude plugin manifest.
+    """Stamp the version and description into the copied Claude plugin manifest.
 
-    The source manifest deliberately carries no version field: VERSION is the
-    only place a version is written by hand.
+    The source manifest deliberately carries neither field: VERSION is the only
+    place a version is written by hand, and PLUGIN_DESCRIPTION_TEMPLATE is the
+    only place a description is.
     """
     dest = plugin_dir / CLAUDE_MANIFEST_REL
     try:
         manifest = json.loads(dest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise AssembleError(f"cannot read {dest}: {exc}") from exc
+    source = REPO_ROOT / "plugins" / PLUGIN_NAME / CLAUDE_MANIFEST_REL
     if "version" in manifest:
         raise AssembleError(
-            f"{REPO_ROOT / 'plugins' / PLUGIN_NAME / CLAUDE_MANIFEST_REL}: "
-            "remove the version field; VERSION is the single source of truth"
+            f"{source}: remove the version field; VERSION is the single source of truth"
         )
-    stamped = {"name": manifest.pop("name", PLUGIN_NAME), "version": version, **manifest}
+    if "description" in manifest:
+        raise AssembleError(
+            f"{source}: remove the description field; the build stamps "
+            "PLUGIN_DESCRIPTION_TEMPLATE into every manifest"
+        )
+    stamped = {
+        "name": manifest.pop("name", PLUGIN_NAME),
+        "version": version,
+        "description": PLUGIN_DESCRIPTION,
+        **manifest,
+    }
     dest.write_text(json.dumps(stamped, indent=2) + "\n", encoding="utf-8")
 
 
