@@ -30,8 +30,9 @@ uv run --with pytest python -B -m pytest tests/harness --collect-only
 ```
 
 Each capability/harness pair is one test with its own negative and positive
-controls. Controls use separate harness state roots, and do not depend on other
-tests running first. Claude defaults to `haiku`, Codex's live sessions to
+controls. Controls use separate harness state roots except the trust-persistence
+sequence, which deliberately shares one home. Tests do not depend on other tests
+running first. Claude defaults to `haiku`, Codex's live sessions to
 `gpt-5.6-luna`, and Cursor to its harness default. `--model` requires a specific
 `--harness`; Codex's local prompt inspection does not use a model.
 
@@ -79,6 +80,21 @@ the hook must not execute and no token may reach the model. Results record the
 trust mode; the bypassed pass does not establish ordinary headless delivery.
 These tests cover startup context, not resume/compaction events, user-visible
 banners, or the built llm-wiki orientation hook.
+
+`test_codex_trust.py` verifies TUI approval persists into fresh `exec` processes.
+It installs one synthetic hook, checks that headless execution leaves it untrusted,
+then approves workspace and hook trust through a private tmux server. After the
+TUI exits, two fresh headless sessions must execute the unchanged hook and receive
+distinct tokens in incoming context, with no tool reads or hook-trust bypass.
+Each receipt must identify that invocation's new transcript, excluding evidence
+from the TUI or earlier sessions. The test requires `tmux`; missing prerequisites
+skip explicitly. UI changes fail with terminal captures rather than silently
+injecting trust configuration. This covers the same home, workspace, and installed
+hook definition; updates, other workspaces, and trust revocation remain separate.
+
+```sh
+uv run --with pytest python -B -m pytest tests/harness/test_codex_trust.py --run-live --keep -s
+```
 
 `test_post_write.py` tests advisory delivery after Claude `Write` and `Edit`,
 Codex `apply_patch`, and Cursor `Write`. Each case performs two scratch writes:
@@ -211,6 +227,10 @@ termination can leave scratch data behind.
 - `post_write.py`: generated post-tool hooks and completed-write delivery evidence.
 - `test_skill_metadata.py`, `test_skill_body.py`: explicit capability sequences.
 - `test_session_context.py`: SessionStart delivery and Codex default-trust cases.
+- `codex_trust.py`, `test_codex_trust.py`: terminal-driven hook approval and
+  persistence into fresh exec sessions sharing an isolated home.
+- `test_codex_trust_audit.py`: shared-home transcript selection and stale-evidence
+  exclusion.
 - `test_post_write.py`: native file-write tools and post-tool advisory delivery.
 - `test_conversation.py`, `test_skill_*_audit.py`: offline parser and assertion tests.
 - `test_session_context_audit.py`: offline context delivery controls.
