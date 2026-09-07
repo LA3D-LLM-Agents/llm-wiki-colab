@@ -7,9 +7,12 @@ from .plugin_fixture import SkillFixture
 from .plugin_install import install_fixture
 from .skill_assertions import audit_messages, check_metadata
 
+# "contain", not "start with": Claude Code lists plugin skills namespaced as
+# plugin-name:skill-name, and a model reading that list literally declines to
+# report a skill whose visible identifier starts with the plugin prefix.
 PROMPT = (
     "Report the names and complete descriptions of available skills whose names "
-    "start with metadata-probe-. Use only the skill metadata already in your "
+    "contain metadata-probe-. Use only the skill metadata already in your "
     "context. Do not invoke skills or use any tools, including file reads. "
     "If none are available, reply NONE."
 )
