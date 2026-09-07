@@ -154,6 +154,20 @@ assert_no_file "$CODEX_PLUGIN_ROOT/commands" "no commands/ directory in the code
 CORE_DIFF="$(diff -r "$PLUGIN_ROOT/core" "$CODEX_PLUGIN_ROOT/core" 2>&1)"
 assert_empty "$CORE_DIFF" "core/ is identical in Claude and Codex subtrees"
 
+# Skill bodies match Claude's once the build's one rewrite (the skill-directory
+# variable to the $SKILL_DIRECTORY placeholder) is undone; the same contract
+# tests/test_cursor_manifests.sh holds for Cursor.
+skill_body() { awk 'f; /^---$/ && ++c == 2 { f = 1 }' "$1"; }
+# shellcheck disable=SC2016  # literal placeholder, not an expansion
+for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
+    if cmp -s <(skill_body "$CODEX_PLUGIN_ROOT/skills/$s/SKILL.md" | sed 's/\$SKILL_DIRECTORY/${CLAUDE_SKILL_DIR}/g') \
+              <(skill_body "$PLUGIN_ROOT/skills/$s/SKILL.md"); then
+        _pass "codex skill $s body matches the claude subtree's up to the skill-dir variable"
+    else
+        _fail "codex skill $s body differs from the claude subtree's beyond the skill-dir variable"
+    fi
+done
+
 # The runtime files must be byte-identical across subtrees: one source, two
 # emitters, and every difference is supposed to be a manifest or a SKILL.md.
 for f in hooks/posttooluse.sh hooks/session-start.py hooks/session-start.d/10-check-attachment.py hooks/session-start.d/15-ensure-local-exclude.py hooks/session-start.d/20-update-wiki.py hooks/session-start.d/30-build-orientation.py core/templates/guidance.md; do

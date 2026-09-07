@@ -248,15 +248,18 @@ CLAUDE_DMI="$(cat "$PLUGIN_ROOT"/skills/*/SKILL.md 2>/dev/null | grep -c 'disabl
 # Skill bodies. Frontmatter is routed per harness, but everything below the
 # closing fence is one text with one meaning, and the preToolUse hook puts
 # CLAUDE_PLUGIN_ROOT into the agent's shell so a body that shells out through
-# the variable resolves on Cursor exactly as it does on Claude. Byte identity is
-# the assertion: any per-harness wording is prose that has to be maintained
-# twice and can only drift.
+# the variable resolves on Cursor exactly as it does on Claude. The one
+# permitted difference is the skill-directory variable, which the build rewrites
+# to the $SKILL_DIRECTORY placeholder (tests/test_skill_paths.sh checks the
+# rewrite itself). Identity after undoing that rewrite is the assertion: any
+# other per-harness wording is prose maintained twice that can only drift.
+# shellcheck disable=SC2016  # literal placeholder, not an expansion
 for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; do
-    if cmp -s <(skill_body "$CURSOR_PLUGIN_ROOT/skills/$s/SKILL.md") \
+    if cmp -s <(skill_body "$CURSOR_PLUGIN_ROOT/skills/$s/SKILL.md" | sed 's/\$SKILL_DIRECTORY/${CLAUDE_SKILL_DIR}/g') \
               <(skill_body "$PLUGIN_ROOT/skills/$s/SKILL.md"); then
-        _pass "cursor skill $s body is byte-identical to the claude subtree's"
+        _pass "cursor skill $s body matches the claude subtree's up to the skill-dir variable"
     else
-        _fail "cursor skill $s body differs from the claude subtree's"
+        _fail "cursor skill $s body differs from the claude subtree's beyond the skill-dir variable"
     fi
 done
 # --- shared runtime --------------------------------------------------------

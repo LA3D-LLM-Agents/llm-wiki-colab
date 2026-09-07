@@ -50,6 +50,14 @@ VERSION_FILE = Path("VERSION")
 # Relative to a plugin directory, not to the repo root: after phase 4 the only
 # manifest that gets read is the emitted one, to stamp it.
 CLAUDE_MANIFEST_REL = Path(".claude-plugin/plugin.json")
+# How a skill body names its own directory. Claude Code exports
+# CLAUDE_SKILL_DIR into the shell that runs a skill's commands, so the source
+# tree writes ${CLAUDE_SKILL_DIR}. Codex and Cursor export nothing but show the
+# model the SKILL.md path, so their subtrees get a placeholder the model fills
+# in by inference; a literal run of it fails loudly on the empty expansion
+# rather than executing a silent wrong path.
+CLAUDE_SKILL_DIR_RE = re.compile(r"\$\{CLAUDE_SKILL_DIR\}|\$CLAUDE_SKILL_DIR\b")
+SKILL_DIR_PLACEHOLDER = "$SKILL_DIRECTORY"
 # (0|[1-9]\d*) rather than \d+: semver forbids leading zeros, and Codex uses
 # the string as a cache directory name.
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
@@ -268,12 +276,14 @@ def emit_plugin_subtree(
     skill_keys: set[str],
     keep_claude_manifest: bool = False,
     transform_hooks: Callable[[Path], None] | None = None,
+    skill_dir_placeholder: str | None = None,
 ) -> None:
     """Emit one harness's plugin subtree.
 
     The shared spine of the three emitters: copy the plugin tree, prune the
     foreign manifest dir, write the native manifest, apply the harness's hook
-    transforms, strip skill frontmatter to the keys that harness reads.
+    transforms, strip skill frontmatter to the keys that harness reads, and
+    rewrite the skill-directory variable when the harness does not set it.
 
     The copied .claude-plugin/ is pruned wherever it is not the native
     manifest: Codex's and Cursor's undocumented fallback chains can resolve a
@@ -297,6 +307,8 @@ def emit_plugin_subtree(
     if transform_hooks is not None:
         transform_hooks(dest)
     strip_skill_frontmatter(dest, skill_keys)
+    if skill_dir_placeholder is not None:
+        rewrite_skill_dir(dest, skill_dir_placeholder)
 
 
 def rewrite_skill_frontmatter(path: Path, allowed: set[str]) -> None:
@@ -348,6 +360,24 @@ def strip_skill_frontmatter(plugin_dir: Path, allowed: set[str]) -> None:
     """Apply the frontmatter routing to every SKILL.md under a plugin subtree."""
     for skill in sorted(plugin_dir.glob("skills/*/SKILL.md")):
         rewrite_skill_frontmatter(skill, allowed)
+
+
+def rewrite_skill_dir(plugin_dir: Path, placeholder: str) -> None:
+    """Replace the Claude skill-directory variable in every SKILL.md body.
+
+    Only SKILL.md is rewritten: scripts under a skill are run with their path
+    already resolved, and hook scripts reach the plugin root through hooks.json
+    expansion. The source must not carry the placeholder itself, or the Claude
+    subtree would ship a variable nothing sets there.
+    """
+    for skill in sorted(plugin_dir.glob("skills/*/SKILL.md")):
+        text = skill.read_text(encoding="utf-8")
+        if placeholder in text:
+            raise AssembleError(
+                f"{skill}: write ${{CLAUDE_SKILL_DIR}} in the source; the build "
+                f"emits {placeholder} for harnesses that do not set it"
+            )
+        skill.write_text(CLAUDE_SKILL_DIR_RE.sub(placeholder, text), encoding="utf-8")
 
 
 def write_marketplace(out: Path, owner_repo: str) -> None:
@@ -664,6 +694,7 @@ def assemble(out: Path, owner_repo: str, source_ref: str, version: str) -> None:
         write_native_manifest=write_codex_plugin_manifest,
         skill_keys=CODEX_SKILL_KEYS,
         transform_hooks=write_codex_hooks,
+        skill_dir_placeholder=SKILL_DIR_PLACEHOLDER,
     )
 
     # Cursor subtree.
@@ -675,6 +706,7 @@ def assemble(out: Path, owner_repo: str, source_ref: str, version: str) -> None:
         write_native_manifest=write_cursor_plugin_manifest,
         skill_keys=CURSOR_SKILL_KEYS,
         transform_hooks=write_cursor_hooks,
+        skill_dir_placeholder=SKILL_DIR_PLACEHOLDER,
     )
 
 
