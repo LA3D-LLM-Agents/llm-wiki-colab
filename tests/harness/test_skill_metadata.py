@@ -131,7 +131,7 @@ def audit(harness, probe, session):
         audit_messages(messages)
 
 
-def run_harness(harness, root, model):
+def run_harness(harness, root, model, body_probe=False):
     binary = "cursor-agent" if harness == "cursor" else harness
     auth_default = {"claude": ".claude/.credentials.json", "codex": ".codex/auth.json",
                     "cursor": ".config/cursor/auth.json"}[harness]
@@ -146,6 +146,14 @@ def run_harness(harness, root, model):
     body = "BODY-" + secrets.token_hex(16)
     description = f"Inert capability fixture. Description marker {token}."
     market, plugin = fixture(root, harness, name, description, body)
+    skill_file = plugin / "skills" / name / "SKILL.md"
+    full_skill = skill_file.read_text()
+    if body_probe:
+        # Both cases install the same skill. Only its body changes, and the
+        # positive token does not exist on disk until the control has finished.
+        skill_file.write_text(full_skill.replace(f"Body-only marker: {body}", "No body marker is supplied."))
+    prompt = (f"Load the skill {name}. "
+              "Report its Body-only marker exactly, or NONE if it has no such marker.") if body_probe else PROMPT
     env = os.environ.copy()
     # Do not inherit opt-outs or extra settings that weaken isolation.
     env.pop("ISOLATED_CURSOR_ALLOW_ACCOUNT_PLUGINS", None)
@@ -165,20 +173,28 @@ def run_harness(harness, root, model):
     version = command("version", ["--version"], root / "version-probe").strip()
     write_json(root / "run.json", {
         "harness": harness, "version": version, "model_override": model,
-        "name": name, "description": description, "body_marker": body,
-        "prompt": None if harness == "codex" else PROMPT,
+        "name": name, "description": description,
+        "prompt": prompt if body_probe or harness != "codex" else None,
         "loading": "local marketplace install" if harness == "codex" else "--plugin-dir",
     })
     for installed in (False, True):
         phase = "present" if installed else "absent"
+        if body_probe and installed:
+            skill_file.write_text(full_skill)
         print(f"{harness}: {phase} control", flush=True)
         probe = root / phase
         session = str(uuid.uuid4())
         if harness == "codex":
-            if installed:
-                command("marketplace", ["plugin", "marketplace", "add", str(market)], probe)
-                command("install", ["plugin", "add", "metadata-fixture@metadata-market"], probe)
-            output = rendered_prompt(command(phase, ["debug", "prompt-input"], probe))
+            if installed or body_probe:
+                command(f"{phase}-marketplace", ["plugin", "marketplace", "add", str(market)], probe)
+                command(f"{phase}-install", ["plugin", "add", "metadata-fixture@metadata-market"], probe)
+            if body_probe:
+                last = root / f"{phase}.last-message"
+                command(phase, ["exec", "--skip-git-repo-check", "-s", "read-only",
+                                "-m", model or "gpt-5.6-luna", "-o", str(last), prompt], probe)
+                output = last.read_text()
+            else:
+                output = rendered_prompt(command(phase, ["debug", "prompt-input"], probe))
         else:
             args = ["-p"]
             if harness == "claude":
@@ -189,36 +205,44 @@ def run_harness(harness, root, model):
                          "--output-format", "text"]
                 if model:
                     args += ["--model", model]
-            if installed:
+            if installed or body_probe:
                 args += ["--plugin-dir", str(plugin)]
             # Claude's --plugin-dir accepts multiple values: the
             # delimiter prevents them consuming the positional prompt.
-            output = command(phase, [*args, "--", PROMPT], probe)
+            output = command(phase, [*args, "--", prompt], probe)
             if not output.strip():
                 raise RuntimeError("empty model response")
-            audit(harness, probe, session)
-        check_metadata(output, name, token, body, installed)
+            if not body_probe:
+                audit(harness, probe, session)
+        if body_probe:
+            from test_skill_body import audit_body
+            evidence = audit_body(harness, probe, session, name, body, installed, output)
+            write_json(root / f"{phase}.audit.json", evidence)
+        else:
+            check_metadata(output, name, token, body, installed)
     return {"status": "pass", "version": version,
             "model": (model or ("haiku" if harness == "claude" else "harness default"))
-                     if harness != "codex" else None,
-            "evidence": "rendered prompt" if harness == "codex" else "token recovery + no-tool conversation audit",
+                     if harness != "codex" else (model or "gpt-5.6-luna" if body_probe else None),
+            "evidence": "body recovery + conversation delivery audit" if body_probe else (
+                "rendered prompt" if harness == "codex" else "token recovery + no-tool conversation audit"),
             "name": name, "description": description}
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(body_probe=False):
+    parser = argparse.ArgumentParser(description=("Skill body delivery: two live sessions per harness."
+                                                 if body_probe else __doc__))
     parser.add_argument("harness", choices=["claude", "codex", "cursor", "all"])
     parser.add_argument("--model", help="live-session model override (single harness only)")
     parser.add_argument("--keep", action="store_true", help="retain private raw captures, including on success")
     args = parser.parse_args()
-    if args.model and args.harness in ("all", "codex"):
-        parser.error("--model requires claude or cursor")
-    root = Path(tempfile.mkdtemp(prefix="skill-metadata-", dir="/tmp"))
+    if args.model and (args.harness == "all" or (args.harness == "codex" and not body_probe)):
+        parser.error("--model requires a single live harness")
+    root = Path(tempfile.mkdtemp(prefix="skill-body-" if body_probe else "skill-metadata-", dir="/tmp"))
     results = {}
     try:
         for harness in (["codex", "claude", "cursor"] if args.harness == "all" else [args.harness]):
             try:
-                results[harness] = run_harness(harness, root / harness, args.model)
+                results[harness] = run_harness(harness, root / harness, args.model, body_probe)
             except (RuntimeError, OSError, ValueError, sqlite3.Error) as exc:
                 results[harness] = {"status": "fail", "reason": str(exc)}
             print(f"{harness}: {json.dumps(results[harness])}", flush=True)
