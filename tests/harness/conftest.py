@@ -4,10 +4,11 @@ from pathlib import Path
 from collections import Counter
 import shutil
 import tempfile
+import subprocess
 
 import pytest
 
-from .harness_support import HarnessRun, credentials, write_json
+from .harness_support import REPO, HarnessRun, credentials, write_json
 
 
 def pytest_addoption(parser):
@@ -24,6 +25,7 @@ def pytest_configure(config):
     config._resource_results = []
     config.addinivalue_line("markers", "live: makes model calls; requires --run-live")
     config.addinivalue_line("markers", "capability: runs an external harness CLI")
+    config.addinivalue_line("markers", "integration: exercises the assembled llm-wiki plugin")
     config.addinivalue_line("markers", "non_deterministic: model-sensitive evaluation; requires explicit model and opt-in")
     if config.getoption("--resource-samples") < 1:
         raise pytest.UsageError("--resource-samples must be positive")
@@ -91,6 +93,18 @@ def pytest_terminal_summary(terminalreporter, config):
     terminalreporter.write_line(str(dict(counts)))
     terminalreporter.write_line(f"First-attempt successes: {successes}/{assessed} assessed attempts; infrastructure failures reported separately")
     terminalreporter.write_line(f"Summary and capture locations: {root / 'summary.json'}")
+
+
+@pytest.fixture
+def built_marketplace(harness_run):
+    """Build the artifact without consulting repository state or real remotes."""
+    run = harness_run
+    output = run.root / "built"
+    with (run.root / "build.log").open("w") as log:
+        subprocess.run(["uv", "run", str(REPO / "build/assemble.py"), "--out", str(output),
+                        "--owner-repo", "LA3D-LLM-Agents/llm-wiki-colab",
+                        "--source-ref", "0" * 40], check=True, stdout=log, stderr=subprocess.STDOUT)
+    return output
 
 
 @pytest.fixture

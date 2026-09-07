@@ -14,7 +14,7 @@ so check the skip summary when verifying a harness.
 
 ```sh
 # Offline only; no harness CLIs or credentials needed
-uv run --with pytest python -B -m pytest tests/harness -m 'not capability'
+uv run --with pytest python -B -m pytest tests/harness -m 'not capability and not integration'
 
 # All capabilities across all three harnesses, retaining private evidence
 uv run --with pytest python -B -m pytest tests/harness --run-live --keep -s
@@ -105,6 +105,35 @@ Cursor. This establishes harness capability, not the behavior of llm-wiki's
 current plain-stdout advisory. Cursor's `afterFileEdit` and actual plugin wiring
 remain separate questions. No assertion requires the model to follow the advice.
 
+## Built-plugin integration
+
+`test_plugin_orientation.py` is marked `integration` and `live`. It assembles the
+plugin into scratch space and installs the appropriate subtree without modifying
+the artifact or substituting fixture hooks. Claude and Codex use a local
+marketplace; Cursor gets a copy under the isolated home's
+`.cursor/plugins/local/llm-wiki`. No `--plugin-dir` override is used. Two fresh
+sessions per harness compare an unopted-in project with a locally seeded
+`.llm-wiki` repository.
+
+```sh
+uv run --with pytest python -B -m pytest tests/harness/test_plugin_orientation.py \
+  --run-live --keep -s
+```
+
+The context capture and model response must contain the unique index marker and
+the latest five of seven log markers. The request must also contain the shipped
+memory guidance and the correctly namespaced SCHEMA reference. Older log entries,
+page bodies, and SCHEMA contents must stay out of the injected context. The
+unopted project must receive no seeded state or memory guidance. Transcript tool
+audits exclude file reads as another route to the markers. Claude uses its API
+request capture for context evidence; Codex and Cursor use conversation records.
+Codex runs with explicit hook-trust bypass, recorded in the results. Default-trust
+behavior remains covered separately by the synthetic SessionStart probe.
+
+This tests installed-plugin orientation delivery, not the separate question of
+whether orientation changes behavior. It does not test the user-visible banner,
+wiki fetching, remote marketplace publishing, or Cursor account-side installation.
+
 ## Non-deterministic resource evaluation
 
 `test_resource_resolution.py` is marked `non_deterministic` as well as `live`.
@@ -177,6 +206,9 @@ termination can leave scratch data behind.
 - `test_conversation.py`, `test_skill_*_audit.py`: offline parser and assertion tests.
 - `test_session_context_audit.py`: offline context delivery controls.
 - `test_post_write_audit.py`: offline write/target binding and advisory controls.
+- `plugin_orientation.py`, `test_plugin_orientation.py`: seeded wiki and built-plugin
+  orientation integration across the three harnesses.
+- `test_plugin_orientation_audit.py`: offline orientation contract checks.
 - `resource_resolution.py`, `test_resource_resolution.py`: instrumented resource
   evaluation and model/harness samples.
 - `test_resource_resolution_audit.py`: offline launch-monitor and classifier checks.
