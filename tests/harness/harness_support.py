@@ -10,6 +10,7 @@ import uuid
 
 from .conversation import load_conversation
 from .plugin_install import install_codex
+from .harness_session import session_claude, session_codex, session_cursor
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -118,30 +119,9 @@ class HarnessRun:
         self.report["hook_trust"] = "bypassed" if trust_hooks else "default"
         probe = self.root / case
         session_id = str(uuid.uuid4())
-        if self.harness == "codex":
-            last = self.root / f"{case}.last-message"
-            args = ["exec", "--skip-git-repo-check", "-s", "workspace-write" if writable else "read-only",
-                    "-m", self.resolved_model, "-o", str(last)]
-            if trust_hooks:
-                args.append("--dangerously-bypass-hook-trust")
-            self.command(case, [*args, prompt], probe)
-            output = last.read_text()
-        else:
-            args = ["-p"]
-            if self.harness == "claude":
-                args += ["--session-id", session_id, "--model", self.resolved_model,
-                         "--max-budget-usd", "1"]
-                if writable:
-                    args += ["--permission-mode", "acceptEdits"]
-            else:
-                args += ["--trust", "--sandbox", "disabled", "--output-format", "text"]
-                args += ["--force"] if writable else ["--mode", "ask"]
-                if self.model:
-                    args += ["--model", self.model]
-            if plugin_dir is not None:
-                args += ["--plugin-dir", str(plugin_dir)]
-            # The delimiter prevents variadic CLI options swallowing the prompt.
-            output = self.command(case, [*args, "--", prompt], probe)
+        execute = {"claude": session_claude, "codex": session_codex, "cursor": session_cursor}[self.harness]
+        output = execute(self, case, prompt, session_id, plugin_dir=plugin_dir,
+                         trust_hooks=trust_hooks, writable=writable)
         return output, load_conversation(self.harness, probe, session_id)
 
     def record(self, case, evidence):
