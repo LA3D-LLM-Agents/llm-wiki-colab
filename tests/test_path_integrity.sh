@@ -15,6 +15,7 @@ for f in \
     core/agents/discipline-gates.md \
     core/templates/guidance.md \
     hooks/session-start.d/10-check-attachment.py \
+    hooks/session-start.d/15-ensure-local-exclude.py \
     hooks/session-start.d/20-update-wiki.py \
     hooks/session-start.d/30-build-orientation.py \
     hooks/session-start.py \

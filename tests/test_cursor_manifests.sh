@@ -245,7 +245,7 @@ for s in wiki-init wiki-ask wiki-enroll wiki-lint wiki-source wiki-experiment; d
 done
 # --- shared runtime --------------------------------------------------------
 # The shared hooks remain identical; adapters translate the harness protocols.
-for f in hooks/posttooluse.sh hooks/session-start.py hooks/session-start.d/10-check-attachment.py hooks/session-start.d/20-update-wiki.py hooks/session-start.d/30-build-orientation.py; do
+for f in hooks/posttooluse.sh hooks/session-start.py hooks/session-start.d/10-check-attachment.py hooks/session-start.d/15-ensure-local-exclude.py hooks/session-start.d/20-update-wiki.py hooks/session-start.d/30-build-orientation.py; do
     if cmp -s "$PLUGIN_ROOT/$f" "$CURSOR_PLUGIN_ROOT/$f"; then
         _pass "$f is byte-identical in the claude and cursor subtrees"
     else

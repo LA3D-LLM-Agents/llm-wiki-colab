@@ -53,8 +53,11 @@ The manifest registers one `hooks/session-start.py` coordinator. It loads
 in filename order. Each file exports `run(state)` and contributes to the shared
 state rather than printing output. Use distinct two-digit prefixes.
 
-The shipped stages validate attachment (`10`), maintain the checkout (`20`),
-and build orientation (`30`). `state["stop"] = True` stops subsequent stages;
+The shipped stages validate attachment (`10`), ensure the local Git exclude
+(`15`), maintain the checkout (`20`), and build orientation (`30`).
+The exclude stage and wiki-init each carry their own implementation; both use
+Git's resolved `info/exclude` path and preserve existing contents.
+`state["stop"] = True` stops subsequent stages;
 `warnings` and `context` accumulate strings for the final response. An unexpected
 stage exception stops processing and produces a diagnostic without failing the
 host session. Only the coordinator serializes harness JSON. Cursor's adapter

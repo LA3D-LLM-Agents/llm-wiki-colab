@@ -13,7 +13,7 @@ A plugin that auto-clones on any repo with a GitHub wiki would silently create a
 
 ## Attach semantics
 
-Attach is clone plus a `.gitignore` line plus a report, with zero commits.
+Attach is clone plus a local Git exclude rule plus a report, with zero commits.
 Migrations and convention drift are `/wiki-lint`'s concern, never a silent attach side effect.
 Attaching to an already-populated wiki runs in update mode (append-missing-only) rather than overwriting a customized SCHEMA.
 A second `/wiki-init` run leaves `HEAD` unchanged and the tree clean.

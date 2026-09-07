@@ -145,7 +145,7 @@ assert_empty "$CORE_DIFF" "core/ is identical in Claude and Codex subtrees"
 
 # The runtime files must be byte-identical across subtrees: one source, two
 # emitters, and every difference is supposed to be a manifest or a SKILL.md.
-for f in hooks/posttooluse.sh hooks/session-start.py hooks/session-start.d/10-check-attachment.py hooks/session-start.d/20-update-wiki.py hooks/session-start.d/30-build-orientation.py core/templates/guidance.md; do
+for f in hooks/posttooluse.sh hooks/session-start.py hooks/session-start.d/10-check-attachment.py hooks/session-start.d/15-ensure-local-exclude.py hooks/session-start.d/20-update-wiki.py hooks/session-start.d/30-build-orientation.py core/templates/guidance.md; do
     if cmp -s "$PLUGIN_ROOT/$f" "$CODEX_PLUGIN_ROOT/$f"; then
         _pass "$f is byte-identical in both subtrees"
     else

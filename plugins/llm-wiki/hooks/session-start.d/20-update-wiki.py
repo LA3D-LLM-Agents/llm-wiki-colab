@@ -93,27 +93,7 @@ def update_wiki(wiki_dir: Path) -> Optional[str]:
     )
 
 
-def ensure_gitignore(repo_root: Path) -> None:
-    """Ensure the project .gitignore ignores the .llm-wiki/ memory dir.
-
-    The memory is a separate checkout inside the project tree and must not be
-    tracked by the main repo. init-wiki.sh adds this line on /wiki-init; this
-    keeps it present for an already-attached wiki. Idempotent and best-effort
-    (never fails the hook).
-    """
-    gi = repo_root / ".gitignore"
-    line = ".llm-wiki/"
-    try:
-        content = gi.read_text() if gi.exists() else ""
-        if line not in content.splitlines():
-            sep = "" if content == "" or content.endswith("\n") else "\n"
-            gi.write_text(content + sep + line + "\n")
-    except OSError:
-        pass
-
-
 def run(state):
-    ensure_gitignore(state["project_root"])
     message = update_wiki(state["wiki_dir"])
     if message:
         target = "context" if message.startswith("Wiki refresh complete:") else "warnings"

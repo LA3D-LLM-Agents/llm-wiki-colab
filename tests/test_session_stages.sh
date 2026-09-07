@@ -42,6 +42,19 @@ with tempfile.TemporaryDirectory() as scratch:
     context = run()
     assert 'not a separate Git checkout' in context
     assert 'Every wiki edit ends with a commit' not in context
+    # The installed startup path repairs missing excludes for a valid wiki.
+    subprocess.run(['git', 'init', '-q', str(root / '.llm-wiki')], check=True)
+    exclude = root / '.git/info/exclude'
+    exclude.write_bytes(b'# personal excludes without final newline')
+    run()
+    expected = b'# personal excludes without final newline\n/.llm-wiki/\n'
+    assert exclude.read_bytes() == expected
+    assert not (root / '.gitignore').exists()
+    run()
+    assert exclude.read_bytes() == expected
+    subprocess.run(['git', '-C', str(root), 'check-ignore', '-q', '.llm-wiki/'], check=True)
+    (root / '.gitignore').write_text('!.llm-wiki/\n')
+    assert 'could not ensure the local wiki ignore rule' in run()
     manifest = json.loads((plugin / 'hooks/hooks.json').read_text())
     entries = manifest['hooks']['SessionStart']
     assert len(entries) == 1 and len(entries[0]['hooks']) == 1

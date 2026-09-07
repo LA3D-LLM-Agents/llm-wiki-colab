@@ -185,6 +185,9 @@ fi
 
 WIKI_DIR="$REPO_ROOT/.llm-wiki"
 
+# Install the local ignore before creating or cloning the nested checkout.
+python3 "$HERE/ensure-local-exclude.py" "$REPO_ROOT"
+
 # Namespaced file names
 HOME_NS="Home_${REPO_NAME}"
 INDEX_NS="index_${REPO_NAME}"
@@ -678,13 +681,6 @@ fi
 # WIKI-INDEX assumed a wiki/ parent and would write WIKI-INDEX.md into the
 # project root; CLAUDE.md injection is replaced by the SessionStart hook. The
 # project repo therefore stays free of vendor config.
-
-# --- Ensure the .llm-wiki/ memory dir is gitignored in the project repo ---
-GITIGNORE="$REPO_ROOT/.gitignore"
-if ! { [[ -f "$GITIGNORE" ]] && grep -qxF ".llm-wiki/" "$GITIGNORE"; }; then
-    printf '%s\n' ".llm-wiki/" >> "$GITIGNORE"
-    echo "Added .llm-wiki/ to $GITIGNORE"
-fi
 
 # --- Commit changes in wiki repo ---
 cd "$WIKI_DIR"
