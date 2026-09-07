@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from .conversation import load_claude_request
+from .session_evidence import load_session_evidence
 from .plugin_install import install_built_plugin
 from .plugin_orientation import OrientationSeed, orientation_evidence, seed_wiki
 
@@ -33,7 +33,6 @@ def test_installed_plugin_orientation(harness, harness_run, built_marketplace):
         install_built_plugin(run, case, built_marketplace)
         # The plugin is already installed; do not inject a --plugin-dir override.
         output, transcript = run.session(case, PROMPT, trust_hooks=harness == "codex")
-        request = load_claude_request(probe) if harness == "claude" else transcript
-        source = "API request" if harness == "claude" else "conversation record"
-        run.record(case, orientation_evidence(transcript, request, output, seed, guidance,
-                                               opted_in=opted_in, evidence_source=source))
+        evidence = load_session_evidence(harness, probe, transcript)
+        run.record(case, orientation_evidence(evidence.transcript, evidence.context, output, seed, guidance,
+                                               opted_in=opted_in, evidence_source=evidence.source))

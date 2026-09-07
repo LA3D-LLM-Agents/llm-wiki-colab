@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from .conversation import load_claude_request
+from .session_evidence import load_session_evidence
 from .session_context import TOKEN, make_session_fixture, session_evidence
 from .skill_assertions import audit_messages
 
@@ -26,9 +26,9 @@ def test_session_context(harness, harness_run):
         captured = json.loads(capture.read_text())
         event = "sessionStart" if harness == "cursor" else "SessionStart"
         assert captured["payload"].get("hook_event_name") == event
-        request = load_claude_request(run.root / case) if harness == "claude" else None
+        evidence = load_session_evidence(harness, run.root / case, conversation)
         run.record(case, session_evidence(conversation, output, captured, emitted=emit,
-                                          request_context=request))
+                                          request_context=evidence.request_context))
 
 
 @pytest.mark.capability

@@ -200,6 +200,8 @@ termination can leave scratch data behind.
   session `plugin_dir`; installed plugins need no directory override.
 - `conversation.py`: harness-specific parsers validate raw records and return a
   `Conversation` containing `TextMessage`, `ToolCall`, and `ToolResult` dataclasses.
+- `session_evidence.py`: selects model-context evidence and retains the transcript
+  separately for tool audits; Claude requires captured API requests.
 - `skill_assertions.py`: metadata and body evidence requirements.
 - `session_context.py`: generated session hooks and delivery evidence requirements.
 - `post_write.py`: generated post-tool hooks and completed-write delivery evidence.

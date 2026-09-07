@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from .conversation import load_claude_request
+from .session_evidence import load_session_evidence
 from .post_write import make_post_write_fixture, post_write_evidence
 
 
@@ -31,6 +31,6 @@ def test_post_write_advisory(harness, tool, harness_run):
                                             trust_hooks=harness == "codex", writable=True)
         assert capture.is_file(), "post-write hook did not execute"
         captures = [json.loads(line) for line in capture.read_text().splitlines()]
-        request = load_claude_request(run.root / case) if harness == "claude" else None
+        evidence = load_session_evidence(harness, run.root / case, conversation)
         run.record(case, post_write_evidence(conversation, output, captures, tool, target,
-                                             emitted=emit, request_context=request))
+                                             emitted=emit, request_context=evidence.request_context))
