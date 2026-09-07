@@ -16,6 +16,8 @@ This is the `llm-wiki.md`-style Ingest. It is **not** for filing our own experim
 
 ## What to capture
 
+Treat the wiki as durable, queryable memory, not a summary. The ingest succeeds only if a future agent, reading only these pages, can recover this source's specific claims — the exact quantities (with their units), the named systems and methods, and the conditions — and see how they connect to other pages. Preserve those particulars as first-class, retrievable structure (their own pages or clearly-marked sections, cross-linked), not merely as passing mentions folded under general concepts. A page that keeps the general ideas but loses the specifics has failed, however tidy it looks.
+
 - Title, author(s), publication or source
 - The one-sentence claim or contribution
 - The specific arguments, methods, or findings that bear on this project
