@@ -105,6 +105,48 @@ Cursor. This establishes harness capability, not the behavior of llm-wiki's
 current plain-stdout advisory. Cursor's `afterFileEdit` and actual plugin wiring
 remain separate questions. No assertion requires the model to follow the advice.
 
+## Non-deterministic resource evaluation
+
+`test_resource_resolution.py` is marked `non_deterministic` as well as `live`.
+It requires `--run-live --run-non-deterministic`, a single `--harness`, and an
+explicit `--model`. It is not part of ordinary capability runs or CI gates.
+
+```sh
+uv run --with pytest python -B -m pytest tests/harness/test_resource_resolution.py \
+  --run-live --run-non-deterministic --harness codex --model gpt-5.6-luna \
+  --resource-samples 5 -s
+```
+
+Each sample is independent, with fresh paths and state, and makes one model
+session. No failed sample is retried automatically. The fixed scenario provides
+an intended bundled Python script and a workspace-relative decoy of the same
+name. The skill uses `${CLAUDE_SKILL_DIR}` for Claude and `$SKILL_DIRECTORY` for
+Codex/Cursor. The user prompt names the skill and operation, without explaining
+path resolution. The execution contract requires the intended script, exact
+arguments, and the project working directory.
+
+Python launch monitors record attempts before the interpreter opens the script;
+scripts separately record their identity, path, arguments, cwd, and launch ID.
+Thus a failed launch without a receipt cannot disappear when the model recovers.
+The trace auditor requires simple `python`/`python3` commands and matching launch
+counts. Absolute interpreters, compound commands, computed command strings, and
+unrecognized execution forms are unassessable infrastructure/evidence failures,
+not first-attempt successes. This intentionally narrow scenario is not a test of
+every possible execution strategy.
+
+Outcomes are `first_attempt_success`, `recovered`, `incorrect_execution`,
+`no_execution`, and `infrastructure_failure`. Only first-attempt success passes
+the pytest assertion. Recovery remains a failed sample. The terminal summary
+reports counts and the success fraction excluding infrastructure failures; it
+does not establish reliability from a single sample. Missing prerequisites are
+pytest skips and do not count as assessed samples.
+
+All evaluation captures are retained automatically, including failed samples.
+An aggregate `summary.json` links each attempt to its captures. Harness version
+and explicit model selector are recorded; selectors/aliases can still move, so
+these results do not claim an immutable resolved model version. Keep scenarios
+and selectors consistent for comparisons, and retain the private captures.
+
 ## Evidence and isolation
 
 The probes use `scripts/isolated-<harness>.sh` and clean `/tmp` workspaces. Wrappers
@@ -135,6 +177,9 @@ termination can leave scratch data behind.
 - `test_conversation.py`, `test_skill_*_audit.py`: offline parser and assertion tests.
 - `test_session_context_audit.py`: offline context delivery controls.
 - `test_post_write_audit.py`: offline write/target binding and advisory controls.
+- `resource_resolution.py`, `test_resource_resolution.py`: instrumented resource
+  evaluation and model/harness samples.
+- `test_resource_resolution_audit.py`: offline launch-monitor and classifier checks.
 
 The older `cursor/test_session_context.sh` remains separately invocable; the
 pytest suite now covers that delivery capability with an added silent control.
