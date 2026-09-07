@@ -17,17 +17,13 @@ def write_json(path, value):
     path.write_text(json.dumps(value))
 
 
-def fixture(root, harness, name, description, body_text):
+def plugin_fixture(root, harness):
     market = root / "fixture"
     plugin = market / "metadata-fixture"
     write_json(plugin / f".{harness}-plugin/plugin.json", {
         "name": "metadata-fixture", "version": "0.0.1",
         "description": "Skill metadata capability fixture.",
     })
-    skill = plugin / "skills" / name / "SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text(f"---\nname: {name}\ndescription: {description}\n---\n"
-                     f"{body_text}\n")
     if harness == "codex":
         write_json(market / ".agents/plugins/marketplace.json", {
             "name": "metadata-market", "plugins": [{
@@ -36,6 +32,15 @@ def fixture(root, harness, name, description, body_text):
                 "description": "Skill metadata capability fixture.",
             }],
         })
+    return market, plugin
+
+
+def fixture(root, harness, name, description, body_text):
+    market, plugin = plugin_fixture(root, harness)
+    skill = plugin / "skills" / name / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(f"---\nname: {name}\ndescription: {description}\n---\n"
+                     f"{body_text}\n")
     return market, plugin
 
 
@@ -106,13 +111,17 @@ class HarnessRun:
             self.command(f"{case}-marketplace", ["plugin", "marketplace", "add", str(self.market)], probe)
             self.command(f"{case}-install", ["plugin", "add", "metadata-fixture@metadata-market"], probe)
 
-    def session(self, case, prompt, *, plugin_loaded):
+    def session(self, case, prompt, *, plugin_loaded, trust_hooks=False):
+        self.report["hook_trust"] = "bypassed" if trust_hooks else "default"
         probe = self.root / case
         session_id = str(uuid.uuid4())
         if self.harness == "codex":
             last = self.root / f"{case}.last-message"
-            self.command(case, ["exec", "--skip-git-repo-check", "-s", "read-only",
-                               "-m", self.resolved_model, "-o", str(last), prompt], probe)
+            args = ["exec", "--skip-git-repo-check", "-s", "read-only",
+                    "-m", self.resolved_model, "-o", str(last)]
+            if trust_hooks:
+                args.append("--dangerously-bypass-hook-trust")
+            self.command(case, [*args, prompt], probe)
             output = last.read_text()
         else:
             args = ["-p"]

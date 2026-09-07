@@ -57,6 +57,29 @@ wiring. Body reads and skill invocations are allowed in the body probe. Neither
 probe evaluates automatic skill selection, instruction compliance, or execution
 of bundled resources.
 
+`test_session_context.py` tests SessionStart delivery with two sessions per
+harness. Both run a fixture hook that generates a fresh token and captures its
+input payload. The silent control emits no context; the positive control emits
+the token using the harness's native context field. The test requires hook
+execution, token recovery, incoming context evidence, and no model tool use.
+This distinguishes a hook that runs from context that actually reaches the model.
+
+```sh
+uv run --with pytest python -B -m pytest tests/harness/test_session_context.py --run-live --keep -s
+```
+
+Claude's transcript can omit injected SessionStart context, so its delivery
+assertion uses the wrapper's API request capture. Its transcript still supplies
+the tool-use audit. Codex and Cursor use their conversation records. Missing
+evidence fails; an assistant echo alone cannot satisfy the positive case.
+
+Codex's delivery pair explicitly uses `--dangerously-bypass-hook-trust` for the
+generated fixture hook. A separate third session tests fresh default-trust state:
+the hook must not execute and no token may reach the model. Results record the
+trust mode; the bypassed pass does not establish ordinary headless delivery.
+These tests cover startup context, not resume/compaction events, user-visible
+banners, or the built llm-wiki orientation hook.
+
 ## Evidence and isolation
 
 The probes use `scripts/isolated-<harness>.sh` and clean `/tmp` workspaces. Wrappers
@@ -79,8 +102,12 @@ termination can leave scratch data behind.
 - `conversation.py`: harness-specific parsers validate raw records and return a
   `Conversation` containing `TextMessage`, `ToolCall`, and `ToolResult` dataclasses.
 - `skill_assertions.py`: metadata and body evidence requirements.
+- `session_context.py`: generated session hooks and delivery evidence requirements.
 - `test_skill_metadata.py`, `test_skill_body.py`: explicit capability sequences.
+- `test_session_context.py`: SessionStart delivery and Codex default-trust cases.
 - `test_conversation.py`, `test_skill_*_audit.py`: offline parser and assertion tests.
+- `test_session_context_audit.py`: offline context delivery controls.
 
-The existing `cursor/test_session_context.sh` and isolation canaries under
-`scripts/isolated-*.test.sh` remain separately invoked shell probes.
+The older `cursor/test_session_context.sh` remains separately invocable; the
+pytest suite now covers that delivery capability with an added silent control.
+Isolation canaries under `scripts/isolated-*.test.sh` remain separate shell probes.

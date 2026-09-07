@@ -99,6 +99,35 @@ def parse_claude(records) -> Conversation:
     return conversation
 
 
+def parse_claude_request(raw) -> Conversation:
+    """Read actual request messages; transcripts can omit SessionStart context."""
+    request = _mapping(raw, "Claude request")
+    conversation = Conversation()
+    if "system" in request:
+        _message(conversation, "system", request["system"])
+    messages = request.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise RuntimeError("malformed Claude request: missing messages")
+    for raw_message in messages:
+        message = _mapping(raw_message, "Claude request message")
+        _message(conversation, message.get("role"), message.get("content"))
+    return conversation
+
+
+def load_claude_request(probe) -> Conversation:
+    files = list((probe / "api-bodies").glob("*.request.json"))
+    if not files:
+        raise RuntimeError("missing Claude request capture")
+    conversation = Conversation()
+    # Retries may produce more than one request for a single session.
+    for file in files:
+        request = parse_claude_request(json.loads(file.read_text()))
+        conversation.messages.extend(request.messages)
+        conversation.calls.extend(request.calls)
+        conversation.results.extend(request.results)
+    return conversation
+
+
 def parse_codex(records) -> Conversation:
     conversation = Conversation()
     for raw in records:

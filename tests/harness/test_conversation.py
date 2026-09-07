@@ -7,7 +7,7 @@ import pytest
 
 from .conversation import (
     Conversation, TextMessage, ToolCall, ToolResult, load_conversation,
-    parse_claude, parse_codex, parse_cursor, rendered_prompt,
+    parse_claude, parse_claude_request, parse_codex, parse_cursor, rendered_prompt,
 )
 
 
@@ -99,3 +99,19 @@ def test_prompt_evidence_excludes_record_metadata():
 def test_malformed_rendered_prompt_fails_closed(raw):
     with pytest.raises(RuntimeError):
         rendered_prompt(raw)
+
+
+def test_claude_request_context_excludes_diagnostics_and_tool_definitions():
+    conversation = parse_claude_request({
+        'system': [{'type': 'text', 'text': 'system context'}],
+        'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': 'hook context'}]}],
+        'tools': [{'description': 'not delivered as session context'}],
+        'diagnostics': {'text': 'not evidence'},
+    })
+    assert conversation.incoming == [('system', 'system context'), ('user', 'hook context')]
+
+
+@pytest.mark.parametrize('captured_request', [{}, {'messages': []}, {'messages': [None]}])
+def test_missing_claude_request_messages_fail_closed(captured_request):
+    with pytest.raises(RuntimeError):
+        parse_claude_request(captured_request)
