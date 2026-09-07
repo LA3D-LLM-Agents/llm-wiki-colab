@@ -5,3 +5,4 @@ plugins/llm-wiki/core/scripts/kg/build/
 devenv.local.nix
 .direnv/
 build/out/
+__pycache__/
