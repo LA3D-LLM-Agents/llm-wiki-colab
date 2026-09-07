@@ -10,7 +10,10 @@ require_env MARKETPLACE_TREE PLUGIN_ROOT
 # Files referenced from the plugin's own hooks/skills.
 for f in \
     skills/wiki-init/scripts/init-wiki.sh \
-    core/Edge-Types.md.template \
+    skills/wiki-init/scripts/init-wiki.py \
+    skills/wiki-init/scripts/ensure-local-exclude.py \
+    skills/wiki-init/assets/Edge-Types.md.template \
+    'skills/wiki-init/assets/SCHEMA_{{REPO_NAME}}.md.template' \
     core/agents/verification-gate.md \
     core/agents/discipline-gates.md \
     core/templates/guidance.md \
@@ -51,17 +54,8 @@ assert_no_file "$PLUGIN_ROOT/.claude-plugin/marketplace.json" \
 assert_no_file "$PLUGIN_ROOT/commands" \
     "no commands/ directory in the built plugin"
 
-# init-wiki owns its helpers directly; no shared library remains.
+# Standalone skill execution is covered by test_init_states.sh.
 assert_no_file "$PLUGIN_ROOT/core/scripts/lib" "plugin omits retired shared library"
-for fn in \
-    lw_warn lw_die lw_repo_root lw_origin_url lw_repo_slug lw_repo_from_url \
-    lw_wiki_url lw_default_branch lw_name_from_origin; do
-    if rg -q "^${fn}\\(\\)" "$PLUGIN_ROOT/skills/wiki-init/scripts/init-wiki.sh"; then
-        _pass "init-wiki owns helper: $fn"
-    else
-        _fail "init-wiki missing helper: $fn"
-    fi
-done
 
 # Template hydration: no {{token}} may survive into the shipped README.
 assert_not_contains "$(cat "$MARKETPLACE_TREE/README.md" 2>/dev/null)" "{{" \

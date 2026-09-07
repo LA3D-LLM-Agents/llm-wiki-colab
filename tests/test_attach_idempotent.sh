@@ -10,16 +10,16 @@ require_env PLUGIN_ROOT
 
 d="$(mk_scratch https://github.com/foo/bar.git)"
 
-# First run: create mode (scaffolds the wiki, one "Initialize" commit).
+# First run: local scaffolding and initialization commits.
 ( cd "$d" && bash "$PLUGIN_ROOT/skills/wiki-init/scripts/init-wiki.sh" --agent claude-code >/dev/null 2>&1 )
 head1="$(git -C "$d/.llm-wiki" rev-parse HEAD)"
 
-# Second run: the wiki now has a SCHEMA, so this is update-mode (attach).
+# Second run: an initialized attachment is a no-op.
 out="$(cd "$d" && bash "$PLUGIN_ROOT/skills/wiki-init/scripts/init-wiki.sh" --agent claude-code 2>&1)"
 head2="$(git -C "$d/.llm-wiki" rev-parse HEAD)"
 
 [ "$head1" = "$head2" ] && _pass "re-attach makes no new commit (HEAD unchanged)" || _fail "re-attach created a commit ($head1 -> $head2)"
-assert_contains "$out" "No wiki changes to commit" "re-attach reports no changes"
+assert_contains "$out" "already-initialized" "re-attach reports already initialized"
 [ -z "$(git -C "$d/.llm-wiki" status --porcelain)" ] && _pass "wiki working tree clean after re-attach" || _fail "re-attach left the wiki dirty"
 
 rm -rf "$d"
