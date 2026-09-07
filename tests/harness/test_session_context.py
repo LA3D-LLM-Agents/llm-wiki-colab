@@ -20,8 +20,8 @@ def test_session_context(harness, harness_run):
     run.start(PROMPT, live=True)
     for case, emit in (("context_absent", False), ("context_present", True)):
         capture = make_session_fixture(run, case, emit=emit)
-        run.install(case)
-        output, conversation = run.session(case, PROMPT, plugin_loaded=True, trust_hooks=harness == "codex")
+        plugin_dir = run.install_fixture(case)
+        output, conversation = run.session(case, PROMPT, plugin_dir=plugin_dir, trust_hooks=harness == "codex")
         assert capture.is_file(), "session-start hook did not execute"
         captured = json.loads(capture.read_text())
         event = "sessionStart" if harness == "cursor" else "SessionStart"
@@ -40,8 +40,8 @@ def test_session_context_requires_codex_hook_trust(harness, harness_run):
     run.start(PROMPT, live=True)
     case = "default_trust"
     capture = make_session_fixture(run, case, emit=True)
-    run.install(case)
-    output, conversation = run.session(case, PROMPT, plugin_loaded=True)
+    plugin_dir = run.install_fixture(case)
+    output, conversation = run.session(case, PROMPT, plugin_dir=plugin_dir)
     audit_messages(conversation)
     assert output.strip(), "empty model response"
     assert not capture.exists(), "hook executed without persisted trust or explicit bypass"

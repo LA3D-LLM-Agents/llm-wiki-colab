@@ -195,6 +195,9 @@ termination can leave scratch data behind.
 
 - `conftest.py`: pytest options, model-call gate, and run lifecycle fixture.
 - `harness_support.py`: native fixture plugins and isolated CLI execution.
+- `plugin_install.py`: harness-specific marketplace/local installation, shared by
+  built-plugin integration and Codex fixtures. Fixture setup returns an optional
+  session `plugin_dir`; installed plugins need no directory override.
 - `conversation.py`: harness-specific parsers validate raw records and return a
   `Conversation` containing `TextMessage`, `ToolCall`, and `ToolResult` dataclasses.
 - `skill_assertions.py`: metadata and body evidence requirements.

@@ -19,8 +19,8 @@ def test_bundled_resource_first_attempt(harness, resource_sample, harness_run):
                        "reference": "${CLAUDE_SKILL_DIR}" if harness == "claude" else "$SKILL_DIRECTORY"})
     run.start(prompt, live=True)
     case = "resource_execution"
-    run.install(case)
-    _, conversation = run.session(case, prompt, plugin_loaded=True, writable=True)
+    plugin_dir = run.install_fixture(case)
+    _, conversation = run.session(case, prompt, plugin_dir=plugin_dir, writable=True)
     skill_root = (run.root / case / "codex/plugins/cache/metadata-market/metadata-fixture/0.0.1/skills" / run.name
                   if harness == "codex" else run.plugin / "skills" / run.name)
     attempts, receipts = json_lines(attempt_log), json_lines(receipt_log)

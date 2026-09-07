@@ -22,12 +22,11 @@ def test_skill_metadata(harness, harness_run):
     run.make_fixture(f"Body-only marker: {run.body_token}")
     run.start(PROMPT if harness != "codex" else None, live=harness != "codex")
     for case, plugin_loaded in (("plugin_absent", False), ("plugin_present", True)):
-        if plugin_loaded:
-            run.install(case)
+        plugin_dir = run.install_fixture(case) if plugin_loaded else None
         if harness == "codex":
             output = rendered_prompt(run.command(case, ["debug", "prompt-input"], run.root / case))
         else:
-            output, conversation = run.session(case, PROMPT, plugin_loaded=plugin_loaded)
+            output, conversation = run.session(case, PROMPT, plugin_dir=plugin_dir)
             audit_messages(conversation)
         check_metadata(output, run.name, run.description_token, run.body_token, plugin_loaded)
         run.record(case, {"metadata_present": plugin_loaded,

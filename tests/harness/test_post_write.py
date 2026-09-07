@@ -26,8 +26,8 @@ def test_post_write_advisory(harness, tool, harness_run):
         prompt = (action + " Then report the post-write advisory token exactly, or NONE if none was supplied. "
                   "Use only the requested write tool and, if required, a read of this target file. Do not read other files.")
         capture = make_post_write_fixture(run, case, tool, target, emit=emit)
-        run.install(case)
-        output, conversation = run.session(case, prompt, plugin_loaded=True,
+        plugin_dir = run.install_fixture(case)
+        output, conversation = run.session(case, prompt, plugin_dir=plugin_dir,
                                             trust_hooks=harness == "codex", writable=True)
         assert capture.is_file(), "post-write hook did not execute"
         captures = [json.loads(line) for line in capture.read_text().splitlines()]

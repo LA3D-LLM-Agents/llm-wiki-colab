@@ -19,6 +19,6 @@ def test_skill_body(harness, harness_run):
         # The positive token must not exist on disk during the negative control.
         if marker_present:
             run.replace_body(f"Body-only marker: {run.body_token}")
-        run.install(case)
-        output, conversation = run.session(case, prompt, plugin_loaded=True)
+        plugin_dir = run.install_fixture(case)
+        output, conversation = run.session(case, prompt, plugin_dir=plugin_dir)
         run.record(case, body_evidence(conversation, run.name, run.body_token, marker_present, output))

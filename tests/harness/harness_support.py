@@ -9,6 +9,7 @@ import subprocess
 import uuid
 
 from .conversation import load_conversation
+from .plugin_install import install_codex
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -105,13 +106,14 @@ class HarnessRun:
         skill = self.plugin / "skills" / self.name / "SKILL.md"
         skill.write_text(f"---\nname: {self.name}\ndescription: {self.description}\n---\n{body_text}\n")
 
-    def install(self, case):
+    def install_fixture(self, case):
+        """Prepare the fixture and return any required session directory override."""
         if self.harness == "codex":
-            probe = self.root / case
-            self.command(f"{case}-marketplace", ["plugin", "marketplace", "add", str(self.market)], probe)
-            self.command(f"{case}-install", ["plugin", "add", "metadata-fixture@metadata-market"], probe)
+            install_codex(self, case, self.market, self.plugin, "metadata-market")
+            return None
+        return self.plugin
 
-    def session(self, case, prompt, *, plugin_loaded, trust_hooks=False, writable=False):
+    def session(self, case, prompt, *, plugin_dir=None, trust_hooks=False, writable=False):
         self.report["writable"] = writable
         self.report["hook_trust"] = "bypassed" if trust_hooks else "default"
         probe = self.root / case
@@ -136,8 +138,8 @@ class HarnessRun:
                 args += ["--force"] if writable else ["--mode", "ask"]
                 if self.model:
                     args += ["--model", self.model]
-            if plugin_loaded:
-                args += ["--plugin-dir", str(self.plugin)]
+            if plugin_dir is not None:
+                args += ["--plugin-dir", str(plugin_dir)]
             # The delimiter prevents variadic CLI options swallowing the prompt.
             output = self.command(case, [*args, "--", prompt], probe)
         return output, load_conversation(self.harness, probe, session_id)
