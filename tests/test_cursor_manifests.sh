@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # L1: the built Cursor subtree carries native manifests, the same install
 # identity as the other two subtrees, hooks rewritten into Cursor's dialect and
-# pointed at both adapters, the frontmatter routing Cursor's behavior forces,
+# pointed at the adapters, the frontmatter routing Cursor's behavior forces,
 # and skill bodies that are byte-identical to the Claude subtree's.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -250,9 +250,7 @@ assert_grep_file "$CURSOR_PLUGIN_ROOT/skills/wiki-doctor/SKILL.md" '${CLAUDE_SKI
     "cursor wiki-doctor retains the shared skill-local command"
 
 # --- shared runtime --------------------------------------------------------
-# One source, three emitters: every difference between subtrees is supposed to
-# be a manifest or a SKILL.md. posttooluse.sh ships here unwired, which is fine,
-# but it must not have drifted.
+# The shared hooks remain identical; adapters translate the harness protocols.
 for f in hooks/posttooluse.sh hooks/session-start.sh hooks/ensure-wiki.py; do
     if cmp -s "$PLUGIN_ROOT/$f" "$CURSOR_PLUGIN_ROOT/$f"; then
         _pass "$f is byte-identical in the claude and cursor subtrees"

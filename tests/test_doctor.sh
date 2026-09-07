@@ -60,7 +60,7 @@ assert_contains "$ucout" "cursor dialect"              "cursor: dialect detected
 assert_contains "$ucout" "hooks.json declares sessionStart" \
     "cursor: lowercase sessionStart satisfies the hook check"
 assert_not_contains "$ucout" "SessionStart + PostToolUse" \
-    "cursor: no PostToolUse advisory demanded"
+    "cursor: no Claude-style PostToolUse key demanded"
 assert_contains "$ucout" "orientation dry-run emits"   "cursor: dry-run runs through the adapter"
 assert_contains "$ucout" "structural failures: 0"      "cursor: no structural failures"
 

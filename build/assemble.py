@@ -42,11 +42,9 @@ CODEX_PLUGIN_DESCRIPTION = (
     "(index + last-5 log) and a verification-gate advisory."
 )
 CURSOR_PLUGIN_SOURCE = "./cursor/plugins/llm-wiki"
-# No verification-gate advisory in the list: Cursor's hooks file wires
-# sessionStart only, so posttooluse.sh ships but is never invoked there.
 CURSOR_PLUGIN_DESCRIPTION = (
     "Opt-in per-repo llm-wiki memory for Cursor: sessionStart orientation "
-    "(index + last-5 log)."
+    "(index + last-5 log) and a verification-gate advisory."
 )
 VERSION_FILE = Path("VERSION")
 # Relative to a plugin directory, not to the repo root: after phase 4 the only
@@ -474,7 +472,7 @@ def write_codex_marketplace(out: Path) -> None:
 
 # Cursor's own hooks dialect: lowercase event names, one flat list of hook
 # definitions per event, and a schema `version`. ${CURSOR_PLUGIN_ROOT} is
-# expanded textually here and nowhere else in the tree, so both adapters are
+# expanded textually here and nowhere else in the tree, so the adapters are
 # handed their own root as an argument.
 CURSOR_HOOKS = {
     "version": 1,
@@ -498,14 +496,25 @@ CURSOR_HOOKS = {
                 ),
             }
         ],
+        "postToolUse": [
+            {
+                "type": "command",
+                "matcher": "Write|Edit",
+                "command": (
+                    'bash "${CURSOR_PLUGIN_ROOT}/hooks/cursor-post-tool-use.sh" '
+                    '"${CURSOR_PLUGIN_ROOT}"'
+                ),
+            }
+        ],
     },
 }
 # template name -> path inside the plugin, for the scripts Cursor's hooks.json
-# points at. Both are installed 0755: a non-executable hook script is the
+# points at. All are installed 0755: a non-executable hook script is the
 # classic silent-no-hook failure.
 CURSOR_ADAPTERS = {
     "cursor-session-start.sh": Path("hooks/cursor-session-start.sh"),
     "cursor-pre-tool-use.sh": Path("hooks/cursor-pre-tool-use.sh"),
+    "cursor-post-tool-use.sh": Path("hooks/cursor-post-tool-use.sh"),
 }
 
 
@@ -513,12 +522,11 @@ def write_cursor_hooks(plugin_dir: Path) -> None:
     """Replace the copied hooks.json with Cursor's dialect, and ship the adapters.
 
     Unlike the Codex file this is not derived from the Claude one: no field of
-    the Claude dialect survives translation, and the one event Cursor delivers
-    for this plugin reaches the shared session-start.sh through an adapter
-    rather than directly. The preToolUse entry has no Claude counterpart at all:
+    the Claude dialect survives translation. SessionStart and post-write output
+    reach Cursor through adapters to its additional_context field.
+    The preToolUse entry has no Claude counterpart at all:
     it exists to put CLAUDE_PLUGIN_ROOT into the shell the agent runs skill
-    commands in. posttooluse.sh is left in the tree unwired; Cursor's
-    postToolUse advisory is not delivered.
+    commands in.
     """
     dest = plugin_dir / "hooks" / "hooks.json"
     if not dest.is_file():

@@ -8,9 +8,9 @@
 #
 # Why a command hook and not a prompt hook:
 #   A command hook that exits 0 is purely advisory. The tool action
-#   proceeds, and whatever the script writes to stdout is added to the
-#   agent's context as a note. A prompt hook cannot do this: it is a
-#   sandboxed single-turn model call with no filesystem or transcript
+#   proceeds, and hookSpecificOutput.additionalContext delivers the reminder
+#   to the model. Plain stdout is only diagnostic output. A prompt hook cannot
+#   do this: it is a sandboxed single-turn model call with no filesystem or transcript
 #   access, and its only outcomes are allow or block. An earlier version
 #   of this hook used a prompt hook that asked the evaluator to check
 #   index/log/back-reference state; the evaluator could not access those,
@@ -67,7 +67,7 @@ $PATCH_TARGETS
 EOF
 
 if [ "$MATCHED" -eq 1 ]; then
-    cat <<'EOF'
+    jq -Rs '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: .}}' <<'EOF'
 A wiki page was just written or edited. Before committing in the wiki
 repo, run the Verification Gate (core/agents/verification-gate.md in the
 llm-wiki plugin) over every page created or edited this session: every

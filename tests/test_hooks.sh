@@ -34,6 +34,9 @@ rm -rf "$d"
 # 3. PostToolUse fires on a .llm-wiki/ write, stays silent otherwise.
 out="$(printf '{"tool_input":{"file_path":".llm-wiki/Foo.md"}}' | bash "$HOOKS/posttooluse.sh")"
 assert_contains "$out" "Verification Gate" "PostToolUse advisory on wiki write"
+printf '%s' "$out" | jq -e '.hookSpecificOutput | .hookEventName == "PostToolUse" and (.additionalContext | contains("Verification Gate"))' >/dev/null \
+    && _pass "PostToolUse advisory uses model-visible additionalContext" \
+    || _fail "PostToolUse advisory is not structured model context"
 out="$(printf '{"tool_input":{"file_path":"src/main.py"}}' | bash "$HOOKS/posttooluse.sh")"
 assert_empty "$out" "PostToolUse silent outside .llm-wiki/"
 

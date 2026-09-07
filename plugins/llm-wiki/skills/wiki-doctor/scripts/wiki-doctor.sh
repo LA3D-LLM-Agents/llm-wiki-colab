@@ -59,9 +59,8 @@ done
 
 # 3. Hooks declared, in this harness's dialect. Claude and Codex read the same
 # Claude-dialect file (only the PostToolUse matcher differs between them).
-# Cursor reads a native-dialect file: lowercase `sessionStart`, driven through
-# an adapter, and no PostToolUse advisory at all, so demanding one there would
-# report a failure the tree is not supposed to have.
+# Cursor reads native lowercase events through adapters; its startup check
+# must not demand the Claude-style SessionStart/PostToolUse keys.
 HOOKS_FILE="$PR/hooks/hooks.json"
 if [ "$DIALECT" = "cursor" ]; then
     if [ -f "$HOOKS_FILE" ] && grep -q sessionStart "$HOOKS_FILE"; then

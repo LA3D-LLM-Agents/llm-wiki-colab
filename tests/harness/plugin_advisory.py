@@ -35,7 +35,8 @@ def advisory_evidence(transcript: Conversation, context: Conversation, output, t
     if expected:
         if normalize(ADVISORY) not in incoming:
             raise RuntimeError("installed plugin advisory absent from incoming context")
-        if normalize(ADVISORY) not in normalize(output):
+        quoted = "\n".join(line.removeprefix("> ") for line in output.splitlines())
+        if normalize(ADVISORY) not in normalize(quoted):
             raise RuntimeError("installed plugin advisory not recovered")
     elif PREFIX in incoming or PREFIX in output:
         raise RuntimeError("wiki advisory delivered for a non-wiki target")

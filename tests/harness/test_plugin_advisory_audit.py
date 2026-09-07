@@ -6,7 +6,7 @@ from .conversation import Conversation, TextMessage, ToolCall, ToolResult
 from .plugin_advisory import ADVISORY, CONTENTS, advisory_evidence
 
 
-@pytest.mark.parametrize("fault", [None, "echo_only", "orientation_only", "other_read", "not_written",
+@pytest.mark.parametrize("fault", [None, "blockquote", "echo_only", "orientation_only", "other_read", "not_written",
                                        "partial_advisory", "no_recovery", "non_wiki_leak"])
 def test_advisory_delivery_contract(tmp_path, fault):
     target = tmp_path / "target.md"
@@ -14,7 +14,9 @@ def test_advisory_delivery_contract(tmp_path, fault):
     transcript = Conversation(calls=[ToolCall("Write", str(target))])
     context = Conversation(results=[ToolResult("Write", ADVISORY)])
     output = ADVISORY
-    if fault == "echo_only":
+    if fault == "blockquote":
+        output = "\n".join("> " + line for line in ADVISORY.splitlines())
+    elif fault == "echo_only":
         context = Conversation(messages=[TextMessage("assistant", ADVISORY)])
     elif fault == "orientation_only":
         context = Conversation(messages=[TextMessage("user", "Before committing, run the Verification Gate.")])
@@ -25,7 +27,7 @@ def test_advisory_delivery_contract(tmp_path, fault):
     elif fault == "no_recovery":
         output = "NONE"
     kwargs = {"expected": fault != "non_wiki_leak", "evidence_source": "fixture"}
-    if fault:
+    if fault not in (None, "blockquote"):
         with pytest.raises(RuntimeError):
             advisory_evidence(transcript, context, output, target, **kwargs)
     else:
