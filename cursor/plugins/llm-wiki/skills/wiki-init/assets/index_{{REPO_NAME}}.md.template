@@ -1,0 +1,18 @@
+---
+type: index
+up: "[[Home_{{REPO_NAME}}]]"
+---
+
+# Index — {{PROJECT_NAME}}
+
+Catalog of all wiki pages, organized by category.
+
+## Overview
+- [Home](Home_{{REPO_NAME}}) — Project summary and navigation
+
+## Wiki conventions
+- [Schema](SCHEMA_{{REPO_NAME}}) — Page conventions and maintenance workflows
+- [Edge Types](Edge-Types) — Typed relationship vocabulary
+- [Log](log_{{REPO_NAME}}) — Wiki activity
+
+<!-- Add pages here as the wiki grows -->

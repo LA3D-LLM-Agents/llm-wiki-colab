@@ -11,7 +11,7 @@
     {
       "name": "llm-wiki",
       "source": "./cursor/plugins/llm-wiki",
-      "description": "Opt-in per-repo llm-wiki memory for Cursor: sessionStart orientation (index + last-5 log), wiki-write-protocol push, and a knowledge-graph build."
+      "description": "Opt-in per-repo llm-wiki memory for Cursor: session-start orientation (index + last-5 log) and a verification-gate advisory."
     }
   ]
 }

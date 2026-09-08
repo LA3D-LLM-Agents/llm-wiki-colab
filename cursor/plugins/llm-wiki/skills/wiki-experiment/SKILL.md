@@ -28,9 +28,8 @@ Follow the Ingest procedure defined in `.llm-wiki/SCHEMA_<repo>.md`. The steps b
 6. Fix cross-references in both directions on every affected page (`[[Page]]` in frontmatter, `[Display](Page)` in body).
 7. Update `index_<repo>.md` with one-line descriptions of new pages in the right category.
 8. Append a `## [YYYY-MM-DD] update | Experiment name` entry to `log_<repo>.md`. The first bullet is the attribution line `- by: <name> via claude-code`, where `<name>` is the output of `git config user.name` in the wiki repo (read it, do not invent it). Then 2 to 5 bullets describing the run. See "Log Entry Attribution" in `SCHEMA_<repo>.md`.
-9. Optionally rebuild the knowledge graph: `${CLAUDE_PLUGIN_ROOT}/core/scripts/kg/build-graph.sh`.
-10. **Run the Verification Gate** at `${CLAUDE_PLUGIN_ROOT}/core/agents/verification-gate.md` over every page created or edited. Do not commit until all criteria pass. The gate catches projection-as-fact, missing corpus tags on numerical claims, missing back-references, and missing log/index entries — the failure modes the discipline-gates Universal Rationalizations table enumerates.
-11. Commit in the wiki's own git repo in two steps: first stage and commit the page and index changes by name with a descriptive message, then stage and commit the `log_<repo>.md` entry on its own. One commit per log entry keeps `git blame` on the log a faithful per-entry record (see "Log Entry Attribution" in SCHEMA). Do not push unless the user requests.
+9. **Run the Verification Gate** at `${CLAUDE_PLUGIN_ROOT}/core/agents/verification-gate.md` over every page created or edited. Do not commit until all criteria pass. The gate catches projection-as-fact, missing corpus tags on numerical claims, missing back-references, and missing log/index entries — the failure modes the discipline-gates Universal Rationalizations table enumerates.
+10. Commit in the wiki's own git repo in two steps: first stage and commit the page and index changes by name with a descriptive message, then stage and commit the `log_<repo>.md` entry on its own. One commit per log entry keeps `git blame` on the log a faithful per-entry record (see "Log Entry Attribution" in SCHEMA). Do not push unless the user requests.
 
 A single experiment write-up typically touches 5 to 15 pages.
 
@@ -42,4 +41,4 @@ A single experiment write-up typically touches 5 to 15 pages.
 
 ## After running
 
-Tell the user which wiki pages were created or updated, summarize the headline result in one sentence, and remind that the wiki commit is local. **When pushing (only if asked), follow the procedure at `${CLAUDE_PLUGIN_ROOT}/core/agents/wiki-write-protocol.md`** — it uses the `wiki_push` wrapper to handle multi-writer collisions, mechanical union-merge for `index_*`/`log_*` files, and content-conflict deferral to the agent's next turn.
+Tell the user which wiki pages were created or updated, summarize the headline result in one sentence, and remind that the wiki commit is local. Push only if asked.

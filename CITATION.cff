@@ -16,7 +16,7 @@ authors:
     email: csweet1@nd.edu
     affiliation: "University of Notre Dame"
 repository-code: "https://github.com/LA3D-LLM-Agents/llm-wiki-colab"
-version: "0.3.0"
+version: "0.4.0"
 date-released: "2026-07-22"
 keywords:
   - llm-wiki

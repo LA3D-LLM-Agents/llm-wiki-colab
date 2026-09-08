@@ -5,11 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/ensure-wiki.py\""
-          },
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py\""
           }
         ]
       }

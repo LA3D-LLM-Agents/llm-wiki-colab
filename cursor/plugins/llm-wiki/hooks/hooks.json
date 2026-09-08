@@ -13,6 +13,13 @@
         "matcher": "Shell",
         "command": "bash \"${CURSOR_PLUGIN_ROOT}/hooks/cursor-pre-tool-use.sh\" \"${CURSOR_PLUGIN_ROOT}\""
       }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "matcher": "Write|Edit",
+        "command": "bash \"${CURSOR_PLUGIN_ROOT}/hooks/cursor-post-tool-use.sh\" \"${CURSOR_PLUGIN_ROOT}\""
+      }
     ]
   }
 }

@@ -1,0 +1,13 @@
+---
+type: index
+up: "[[Home_{{REPO_NAME}}]]"
+---
+
+# Log — {{PROJECT_NAME}}
+
+Chronological record of wiki activity.
+
+## [{{DATE}}] create | Wiki initialized
+{{BY_LINE}}
+- Created wiki structure with namespaced navigation files
+- Ready for first ingest
