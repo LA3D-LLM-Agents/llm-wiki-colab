@@ -108,6 +108,53 @@ def ensure_exclude(root: Path) -> None:
     helper["ensure_local_exclude"](root)
 
 
+def local_config(repo: Path, key: str) -> str:
+    result = subprocess.run(["git", "-C", str(repo), "config", "--local", "--get", key],
+                            capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def seed_identity(root: Path, wiki: Path) -> None:
+    """Carry the host project's local identity into the wiki checkout.
+
+    The wiki is a separate repository nested inside the host, so Git resolves
+    its identity without ever seeing the host's local user.name and user.email.
+    Copying them keeps every wiki commit, including later ones by assistants,
+    attributed the way the project's own commits are. An identity the wiki
+    already has wins, and a missing local identity leaves global resolution.
+    """
+    for key in ("user.name", "user.email"):
+        value = local_config(root, key)
+        if value and not local_config(wiki, key):
+            git(wiki, "config", key, value)
+
+
+def author_name(repo: Path) -> str:
+    """Return the name Git commits as in repo.
+
+    useConfigOnly rejects the identity Git otherwise guesses from the account
+    and hostname, so attribution is never a machine name nobody chose.
+    """
+    author = git(repo, "-c", "user.useConfigOnly=true", "var", "GIT_AUTHOR_IDENT")
+    git(repo, "-c", "user.useConfigOnly=true", "var", "GIT_COMMITTER_IDENT")
+    return author.rsplit(" <", 1)[0]
+
+
+def require_identity(root: Path) -> None:
+    """Fail before creating anything unless the host project can commit.
+
+    Seeding carries the host's local identity into the wiki and the global
+    configuration reaches both, so an identity here is one the wiki has too.
+    """
+    try:
+        author_name(root)
+    except subprocess.CalledProcessError as exc:
+        raise InitError(
+            "missing-identity", "Git has no user.name and user.email to attribute wiki commits to. "
+            "Set them for this project with `git config user.name` and `git config user.email`, "
+            "or globally with `--global`, then rerun.", error=error_text(exc)) from exc
+
+
 def render(template: str, values: dict[str, str]) -> str:
     # One substitution pass: user-provided titles are literal, never templates
     # or shell code. Uppercase placeholders are intentionally runtime values.
@@ -117,11 +164,7 @@ def render(template: str, values: dict[str, str]) -> str:
 def scaffold(wiki: Path, name: str, title: str, agent: str, missing_templates_only: bool) -> list[str]:
     if git(wiki, "status", "--porcelain"):
         raise InitError("local-changes", "Scaffolding needs a clean wiki checkout. Preserve or commit its local work, then rerun.")
-    # Fail before writing if Git cannot commit, and read attribution from the
-    # wiki's own configuration rather than the host repository's config.
-    git(wiki, "var", "GIT_AUTHOR_IDENT")
-    git(wiki, "var", "GIT_COMMITTER_IDENT")
-    user = git(wiki, "config", "user.name")
+    user = author_name(wiki)
     values = {"REPO_NAME": name, "PROJECT_NAME": title, "DATE": date.today().isoformat(),
               "BY_LINE": f"- by: {user}" + (f" via {agent}" if agent else "")}
     templates = [ASSETS / "Edge-Types.md.template"] if missing_templates_only else sorted(ASSETS.glob("*.md.template"))
@@ -162,14 +205,16 @@ def initialize(args, root: Path) -> dict:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name in (".", ".."):
         raise InitError("invalid-name", "Repository namespace must be a filename-safe repo name; use --repo-name.")
     attached = False
-    if os.path.lexists(wiki):
+    exists = os.path.lexists(wiki)
+    if exists:
         if not is_wiki_checkout(wiki):
             raise InitError("invalid-attachment", ".llm-wiki/ is not a separate Git checkout. Repair the attachment before initializing.")
         if has_schema(wiki, name) and not args.stamp_missing_templates:
             return {"status": "already-initialized"}
-    else:
-        if args.stamp_missing_templates:
-            raise InitError("missing-attachment", "Attach the wiki before stamping missing templates.")
+    elif args.stamp_missing_templates:
+        raise InitError("missing-attachment", "Attach the wiki before stamping missing templates.")
+    require_identity(root)
+    if not exists:
         if args.github:
             attach(root, wiki)
             attached = True
@@ -179,6 +224,7 @@ def initialize(args, root: Path) -> dict:
         if not is_wiki_checkout(wiki):
             raise InitError("invalid-attachment", "The new .llm-wiki/ is not a separate Git checkout.")
     ensure_exclude(root)
+    seed_identity(root, wiki)
     if has_schema(wiki, name) and not args.stamp_missing_templates:
         return {"status": "attached"}
     created = scaffold(wiki, name, args.name or name, args.agent, args.stamp_missing_templates)
