@@ -55,12 +55,21 @@ Bump the devenv pin in the workflow together with the devenv used locally.
 devenv captures task output and prints it only when the task fails.
 A green run therefore shows one line per task, and a red run shows the whole suite output including the failing file count.
 
+## Interpreter floors
+
+The shipped hooks run under the user's system interpreters, not under the lock.
+Stock macOS ships bash 3.2.57 and Python 3.9, so those are the floors the plugin supports.
+`llm-wiki:test-floor` runs the suite once more with both floors first on PATH, so a hook that picks up a newer bash or Python feature fails here rather than on a user's machine.
+bash 3.2 is built from source in `devenv.nix`, since no current distribution packages it.
+Python 3.9 comes from the `nixpkgs-py39` input, pinned to the last nixpkgs release that carried it.
+CI stores the bash build in the Actions cache keyed on `devenv.nix` and `devenv.lock`, so it is compiled once per lock change.
+
 ## Rehearsing CI locally
 
 `devenv tasks run llm-wiki:ci` runs the workflow under act in the `catthehacker/ubuntu:act-latest` image, using the repository `.actrc`.
-The container runs privileged, because Nix builds need to create sandboxes, and mounts the Docker volume `llm-wiki-nix` at `/nix`.
-The first run installs Nix into that volume; later runs detect the existing install and reuse the store.
-`docker volume rm llm-wiki-nix` resets it.
+The container runs privileged, because Nix builds need to create sandboxes, and is kept between runs.
+The first run installs Nix and builds the floor interpreters; later runs detect the existing install and reuse the store, while the checkout step copies the current working tree in each time.
+`docker rm -f` on the `act-ci-test-*` container resets it.
 Never pass `--bind` to act: devenv writes profile links into `.devenv/`, and the container's store paths would replace the host's.
 
 ## Session-start stages

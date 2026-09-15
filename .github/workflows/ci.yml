@@ -20,5 +20,23 @@ jobs:
       - name: Install devenv
         run: nix profile add github:cachix/devenv/v2.2.1
 
+      # bash 3.2 is built from source and no binary cache has it, so the
+      # closure round-trips through the Actions cache keyed on the lock.
+      - name: Restore the floor interpreter closure
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/llm-wiki-floor
+          key: floor-${{ runner.os }}-${{ hashFiles('devenv.nix', 'devenv.lock') }}
+
+      - name: Import the cached closure into the store
+        run: |
+          if [ -d ~/.cache/llm-wiki-floor ]; then
+            nix copy --all --no-check-sigs --from "file://$HOME/.cache/llm-wiki-floor"
+          fi
+
       - name: Build the shell and run the test tasks
         run: devenv test
+
+      - name: Export the floor interpreter closure for the cache
+        shell: devenv shell -- bash -e {0}
+        run: nix copy --to "file://$HOME/.cache/llm-wiki-floor" "$LLM_WIKI_BASH32"
