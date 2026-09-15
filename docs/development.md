@@ -2,9 +2,9 @@
 
 ## Toolchain
 
-devenv.sh provisions the stable tools used for local work: `jq`, `shellcheck`, and `uv`.
-devenv is a convenience, not a contract.
+devenv.sh provisions the stable tools: `act`, `actionlint`, `git`, `jj`, `jq`, `shellcheck`, and `uv`.
 Every build, test, and publish script is a plain script runnable with those tools on PATH, and nothing in the repository may require the devenv shell.
+CI runs inside the devenv shell, so `devenv.lock` is the definition of the toolchain the gates are checked against.
 
 Platform CLIs (`claude`, `codex`, and `cursor-agent`) are installed at their current release, outside the devenv lock.
 They are the subject under test, so they must match what users actually run rather than a pinned version.
@@ -45,6 +45,23 @@ A bump is an ordinary source commit on `src`: edit `VERSION`, commit, publish.
 CI runs only deterministic gates: build, validation, and behavior tests.
 CI never gates on model-based evaluation.
 Evaluation runs are operator-driven, since subscription auth is not reliably available in CI, and their results land as data rather than as a pass/fail signal.
+
+`.github/workflows/ci.yml` runs on every push to `src` and on pull requests.
+It installs a pinned Determinate Nix and a pinned devenv, then runs `devenv test`.
+The gates are the devenv tasks wired `before = [ "devenv:enterTest" ]`, so adding a gate is adding a task and needs no workflow change.
+The platform CLIs are not in the devenv lock, so the checks that need them skip in CI and run only on a developer host.
+Bump the devenv pin in the workflow together with the devenv used locally.
+
+devenv captures task output and prints it only when the task fails.
+A green run therefore shows one line per task, and a red run shows the whole suite output including the failing file count.
+
+## Rehearsing CI locally
+
+`devenv tasks run llm-wiki:ci` runs the workflow under act in the `catthehacker/ubuntu:act-latest` image, using the repository `.actrc`.
+The container runs privileged, because Nix builds need to create sandboxes, and mounts the Docker volume `llm-wiki-nix` at `/nix`.
+The first run installs Nix into that volume; later runs detect the existing install and reuse the store.
+`docker volume rm llm-wiki-nix` resets it.
+Never pass `--bind` to act: devenv writes profile links into `.devenv/`, and the container's store paths would replace the host's.
 
 ## Session-start stages
 
