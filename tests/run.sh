@@ -10,6 +10,18 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
+# The Cursor smoke spends model calls against the real account. A credentials
+# file that exists but cannot refresh fails every smoke assertion without
+# saying why, so prove the sign-in works before anything is built.
+if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ]; then
+    echo "===== harness auth ====="
+    if ! "$ROOT/scripts/check-harness-auth.sh" cursor </dev/null; then
+        echo "########## cursor is not signed in; the smoke cannot run ##########"
+        exit 1
+    fi
+    echo ""
+fi
+
 if [ -n "${LLM_WIKI_BUILT_TREE:-}" ]; then
     OUT="$LLM_WIKI_BUILT_TREE"
     mkdir -p "$OUT"

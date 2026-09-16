@@ -4,7 +4,7 @@ description: Cuts a plugin release. Runs the live harness checks, bumps VERSION,
 argument-hint: "[version]"
 arguments: version
 disable-model-invocation: true
-allowed-tools: Bash(cat VERSION) Bash(command -v *) Bash(claude --version) Bash(codex --version) Bash(cursor-agent --version) Bash(ls *) Bash(git status *) Bash(git log *) Bash(git tag --list *) Bash(git rev-parse *) Bash(git merge-base *) Bash(git fetch *) Bash(git ls-remote *) Bash(gh run *) Bash(git-cliff *)
+allowed-tools: Bash(cat VERSION) Bash(command -v *) Bash(scripts/check-harness-auth.sh*) Bash(claude --version) Bash(codex --version) Bash(cursor-agent --version) Bash(ls *) Bash(git status *) Bash(git log *) Bash(git tag --list *) Bash(git rev-parse *) Bash(git merge-base *) Bash(git fetch *) Bash(git ls-remote *) Bash(gh run *) Bash(git-cliff *)
 ---
 
 # Cut a release
@@ -71,12 +71,13 @@ Confirm the prerequisites first, since a missing one turns into a silent skip ra
 
 ```sh
 command -v claude codex cursor-agent tmux
-claude --version; codex --version; cursor-agent --version
-ls ~/.claude/.credentials.json ~/.codex/auth.json ~/.config/cursor/auth.json
+scripts/check-harness-auth.sh
 ```
 
-Only proceed when every command succeeded and `cursor-agent` is 2026.08.11 or newer.
-Write the three versions into the checklist reply; publish stamps the first two into the publish commit, and the reply is the record for Cursor.
+The check makes one short model call per harness, because a credentials file that exists proves nothing: the token refresh at first use is what fails when a sign-in has lapsed, and the CLIs' own status commands do not exercise it.
+Only proceed when the check prints `ok` for all three harnesses and the `cursor-agent` version it prints is 2026.08.11 or newer.
+When a harness fails, the line names the login command; ask the operator to run it, then run the check again.
+Write the three versions from the check's output into the checklist reply; publish stamps the first two into the publish commit, and the reply is the record for Cursor.
 Ask the operator to confirm before starting, since both runs spend model calls and take a while.
 
 ```sh

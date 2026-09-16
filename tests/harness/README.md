@@ -8,9 +8,12 @@ uv run --with pytest python -B -m pytest tests/harness
 
 By default this runs offline audit checks and Codex's local metadata inspection.
 Tests that make model calls are skipped unless `--run-live` is supplied. Selecting
-`-m live` alone does not authorize model calls. Missing CLIs or wrapper credentials
-also produce explicit skips. Pytest exit codes apply: an all-skipped run exits 0,
-so check the skip summary when verifying a harness.
+`-m live` alone does not authorize model calls. A live run starts by proving every
+selected harness can complete an authenticated call (`scripts/check-harness-auth.sh`,
+one short completion each) and exits 2 before collecting when one cannot, since a
+credentials file that exists but cannot refresh would otherwise fail every case of
+that harness. Pytest exit codes apply: an all-skipped run exits 0, so check the
+skip summary when verifying a harness.
 
 ```sh
 # Offline only; no harness CLIs or credentials needed

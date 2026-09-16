@@ -21,6 +21,7 @@ Copy the built subtree there; do not link it.
 Cursor silently ignores symlinks inside an installed plugin, so a linked tree installs as a plugin whose files are all missing.
 The skill namespace is flat, so a local copy and a real install of the same plugin collide and both sets of hooks fire.
 `tests/test_cursor_manifests.sh` carries a live check of this loop, gated behind `LLM_WIKI_CURSOR_SMOKE=1` because it writes into `~/.cursor/plugins/local/` and spends a model call.
+Under that flag `tests/run.sh` first proves the Cursor sign-in can complete a call (`scripts/check-harness-auth.sh cursor`) and exits 1 when it cannot, since a lapsed sign-in otherwise fails every smoke assertion without naming the cause.
 
 ## Script language conventions
 

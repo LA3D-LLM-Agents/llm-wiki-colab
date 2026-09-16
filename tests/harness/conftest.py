@@ -33,6 +33,29 @@ def pytest_configure(config):
         raise pytest.UsageError("--model requires --harness claude, codex, or cursor")
 
 
+def pytest_sessionstart(session):
+    """Refuse a live run whose harnesses cannot authenticate.
+
+    Credential files prove nothing: the refresh at first use is what failed on
+    2026-09-16, and every case of the run spent its calls discovering it. One
+    probe per harness surfaces the sign-in problem before the first case.
+    """
+    config = session.config
+    if not config.getoption("--run-live"):
+        return
+    harness = config.getoption("--harness")
+    names = ["claude", "codex", "cursor"] if harness == "all" else [harness]
+    result = subprocess.run([str(REPO / "scripts/check-harness-auth.sh"), *names],
+                            stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    reporter = config.pluginmanager.getplugin("terminalreporter")
+    reporter.ensure_newline()
+    reporter.write_line("harness auth check:")
+    for line in result.stdout.splitlines():
+        reporter.write_line(line)
+    if result.returncode:
+        pytest.exit("a live run needs every selected harness signed in", returncode=2)
+
+
 def pytest_generate_tests(metafunc):
     if "resource_sample" in metafunc.fixturenames:
         metafunc.parametrize("resource_sample", range(1, metafunc.config.getoption("--resource-samples") + 1))
