@@ -40,6 +40,38 @@ The build stamps it into every emitted manifest, so bumping is a one-file edit.
 A bump is an ordinary source commit on `src`: edit `VERSION`, commit, publish.
 `build/publish.py` refuses to publish a changed tree that reuses the version the target branch already carries, so a forgotten bump fails the publish rather than shipping an update Codex users never receive.
 
+## Releasing
+
+Publishing happens locally, because the gates need the harness CLIs and CI has no subscription auth.
+A publish to `main` also tags the source commit as `v<VERSION>`, so the tag, the `VERSION` file, and the `source-ref` trailer in the publish commit cannot disagree.
+The tag lives on `src`, where the commit history is, since `main` carries one squashed build commit per release and nothing to write a changelog from.
+
+```sh
+uv run build/publish.py --branch main --allow-main
+jj git push -b main
+jj git push --tag v0.5.0
+```
+
+Push `main` before the tag, or push both refs atomically.
+The tag push triggers CI, which reads `main`'s tip and refuses if the tag landed first.
+
+CI never publishes.
+On every push and on every release tag it runs `build/publish.py --verify origin/main --reachable-from origin/src`, which extracts the source commit that `main`'s tip records with `git archive`, rebuilds the artifact from it, and refuses unless the tree hash matches the published one.
+That catches a publish made from uncommitted edits, a source commit that jj later rewrote, and a `main` moved by hand.
+On a tag push it also passes `--tag`, which requires the tag to name the recorded source commit and the version the published tree carries.
+A publish commit records `gates: skipped` when the suite did not run, and verify refuses such a tree.
+
+Release notes come from the conventional commits between two release tags, rendered by git-cliff with the repository `cliff.toml`.
+Commits scoped to the repository's own tooling (`ci`, `dev`, `docs`, `build`, `deps`, `act`, `tests`) and the `chore`, `docs`, `test`, and `style` types are left out, so the list holds only what a person who installs the plugin would notice.
+Each entry carries the commit subject and the first sentence of the body, so a body that leads with the symptom reads as a changelog line without editing.
+
+```sh
+git-cliff --latest --strip all > notes.md
+```
+
+Write a short preamble above the generated list saying what the release means, then attach the notes to the tag with `gh release create v0.5.0 --notes-file notes.md`.
+`git-cliff --unreleased --strip all` previews the next release's list before it is tagged.
+
 ## CI and evaluation boundaries
 
 CI runs only deterministic gates: build, validation, and behavior tests.

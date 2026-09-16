@@ -26,6 +26,7 @@ in
     pkgs.act
     pkgs.actionlint
     pkgs.git
+    pkgs.git-cliff
     pkgs.jq
     pkgs.jujutsu
     pkgs.python3
