@@ -68,8 +68,9 @@ CI stores the bash build in the Actions cache keyed on `devenv.nix` and `devenv.
 
 `devenv tasks run llm-wiki:ci` runs the workflow under act in the `catthehacker/ubuntu:act-latest` image, using the repository `.actrc`.
 The container runs privileged, because Nix builds need to create sandboxes, and is kept between runs.
-The first run installs Nix and builds the floor interpreters; later runs detect the existing install and reuse the store, while the checkout step copies the current working tree in each time.
-`docker rm -f` on the `act-ci-test-*` container resets it.
+The first run installs Nix and builds the floor interpreters; later runs detect the existing install and reuse the store.
+The checkout step copies the working tree into the container but never removes anything, so a file deleted or renamed on the host lingers there and can keep a stale test running.
+`docker rm -f` on the `act-ci-test-*` container resets it; do that after deleting or renaming tracked files.
 Never pass `--bind` to act: devenv writes profile links into `.devenv/`, and the container's store paths would replace the host's.
 
 ## Session-start stages
