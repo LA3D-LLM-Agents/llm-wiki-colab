@@ -88,9 +88,10 @@ LLM_WIKI_CURSOR_SMOKE=1 bash tests/run.sh
 Only proceed when both exit 0 and the output passes both reads.
 The pytest short summary lists no `SKIPPED` line other than ones reading `evaluation requires --run-non-deterministic`; any other skip means a harness was not exercised, and an all-skipped run still exits 0.
 The bash run prints no `skip  cursor smoke install` line.
-Record the `Summary and capture locations:` path pytest prints; the captures are private and stay on this machine.
+Each case prints `Private captures retained: <directory>` after its result character; those directories are the debugging record, are private, and stay on this machine.
 
 If a Codex case fails on sandbox initialization, the session ran inside a nested sandbox; rerun with the tool sandbox off rather than changing the harness's own permissions.
+For any other failure, find its cause with [diagnosis.md](diagnosis.md) before reporting to the operator.
 Any failing case blocks the release: fix on `src`, push, and restart from step 1.
 
 ## Step 4: bump VERSION and preview the notes
@@ -182,4 +183,5 @@ Report the harness checked and the version seen, and tick the last item.
 
 ## Additional resources
 
+- For reading a failed live check, finding its capture, and telling a lapsed sign-in from a regression, see [diagnosis.md](diagnosis.md)
 - For publish refusals, taking back a local publish, and what to do after a bad push, see [recovery.md](recovery.md)
