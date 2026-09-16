@@ -351,6 +351,7 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
 
     SMOKE_PROMPT='Answer in exactly two lines and nothing else. Line 1: "SKILLS:" followed by the names of every skill available to you whose name starts with wiki, comma separated, or NONE. Line 2: "MARKER:" followed by the exact token in your context that starts with LLMWIKI-SMOKE-, or NONE. Do not use any tools.'
     SMOKE_OUT="$(cursor-agent -p --trust --workspace "$SMOKE_FIX" "$SMOKE_PROMPT" 2>&1)"
+    smoke_fail_before="$ASSERT_FAIL"
 
     # Load proof first. If the plugin did not install at all, the marker
     # assertion below would fail too and say nothing about why.
@@ -362,6 +363,13 @@ if [ "${LLM_WIKI_CURSOR_SMOKE:-}" = "1" ] && command -v cursor-agent >/dev/null 
     # so quoting it back means additional_context reached the model.
     assert_contains "$SMOKE_OUT" "$MARKER" \
         "sessionStart additional_context reached the model (marker quoted back)"
+    # The assertions name what was missing; only the reply says why. An auth
+    # error, a timeout, or a model that ignored the format each look the same
+    # from the FAIL lines alone.
+    if [ "$ASSERT_FAIL" -gt "$smoke_fail_before" ]; then
+        printf '  smoke reply (cursor-agent stdout+stderr):\n'
+        printf '%s\n' "$SMOKE_OUT" | sed 's/^/    | /'
+    fi
 
     # --- the preToolUse export, end to end ---------------------------------
     # The assertions above prove sessionStart reaches the model. This one proves
@@ -376,9 +384,11 @@ test -f "$CLAUDE_PLUGIN_ROOT/.cursor-plugin/plugin.json" || exit 1
 printf 'ROOT-PROBE from CLAUDE_PLUGIN_ROOT\n'
 PROBE
     PROBE_PROMPT='Run exactly: bash "${CLAUDE_PLUGIN_ROOT}/tests/root-probe.sh". Do not substitute the variable, add environment assignments, or use fallbacks. Report its output verbatim.'
-    # stdout only: the trace has to stay parseable JSONL for jq.
+    # stdout only: the trace has to stay parseable JSONL for jq. stderr goes
+    # to a file so a CLI error can still be shown when the assertions fail.
     PROBE_TRACE="$(cursor-agent -p --trust --force --workspace "$SMOKE_FIX" \
-        --output-format stream-json "$PROBE_PROMPT" 2>/dev/null)"
+        --output-format stream-json "$PROBE_PROMPT" 2>"$SMOKE_FIX/probe.stderr")"
+    probe_fail_before="$ASSERT_FAIL"
     # `success` and `failure` are two shapes of the same record; taking both
     # means a 127 arrives as a reported exit code and a message rather than as
     # an empty variable that fails every assertion for no stated reason.
@@ -413,6 +423,14 @@ PROBE
         "root probe's output carries no missing-file error"
     assert_contains "$PROBE_STDOUT" "from CLAUDE_PLUGIN_ROOT" \
         "root probe resolved its root from the exported variable, not its own location"
+    if [ "$ASSERT_FAIL" -gt "$probe_fail_before" ]; then
+        printf '  probe shell call (from the stream-json trace; empty = no shell call recorded):\n'
+        printf '%s\n' "$PROBE_CALL" | sed 's/^/    | /'
+        printf '  probe trace tail:\n'
+        printf '%s\n' "$PROBE_TRACE" | tail -5 | cut -c1-400 | sed 's/^/    | /'
+        printf '  probe stderr:\n'
+        sed 's/^/    | /' "$SMOKE_FIX/probe.stderr"
+    fi
 
     smoke_cleanup
     trap - EXIT INT TERM
