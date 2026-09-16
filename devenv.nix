@@ -31,6 +31,8 @@ in
     pkgs.jujutsu
     pkgs.python3
     pkgs.shellcheck
+    # The Codex hook-trust probe drives the TUI through tmux and skips without it.
+    pkgs.tmux
     pkgs.uv
   ];
 
