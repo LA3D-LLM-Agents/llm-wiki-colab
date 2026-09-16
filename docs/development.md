@@ -63,7 +63,8 @@ On a tag push it also passes `--tag`, which requires the tag to name the recorde
 A publish commit records `gates: skipped` when the suite did not run, and verify refuses such a tree.
 
 Release notes come from the conventional commits between two release tags, rendered by git-cliff with the repository `cliff.toml`.
-Commits scoped to the repository's own tooling (`ci`, `dev`, `docs`, `build`, `deps`, `act`, `tests`) and the `chore`, `docs`, `test`, and `style` types are left out, so the list holds only what a person who installs the plugin would notice.
+Commits scoped to the repository's own tooling (`ci`, `dev`, `docs`, `build`, `deps`, `act`, `test`, `tests`, `publish`, `release`, `harness`, `scripts`) and the `chore`, `docs`, `test`, and `style` types are left out.
+Breaking changes remain in the notes even when their scope or type would otherwise exclude them.
 Each entry carries the commit subject and the first sentence of the body, so a body that leads with the symptom reads as a changelog line without editing.
 
 ```sh

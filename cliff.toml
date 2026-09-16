@@ -47,7 +47,7 @@ protect_breaking_commits = true
 # Order matters: the first matching parser wins, so the internal scopes are
 # skipped before the type parsers can claim them.
 commit_parsers = [
-    { message = "^[a-z]+\\((ci|dev|docs|build|deps|act|tests?)\\)", skip = true },
+    { message = "^[a-z]+\\((ci|dev|docs|build|deps|act|tests?|publish|release|harness|scripts)\\)", skip = true },
     { message = "^(chore|docs|test|style)\\b", skip = true },
     { message = "^feat", group = "<!-- 0 -->Added" },
     { message = "^fix", group = "<!-- 1 -->Fixed" },
