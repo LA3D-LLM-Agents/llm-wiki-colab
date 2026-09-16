@@ -3,13 +3,18 @@ name: ci
 on:
   push:
     branches: [src]
+    tags: ["v*"]
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # Full history: the verify step rebuilds main from the source commit it
+      # records, which is never the commit being tested.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: DeterminateSystems/determinate-nix-action@v3.22.3
         with:
@@ -36,6 +41,18 @@ jobs:
 
       - name: Build the shell and run the test tasks
         run: devenv test
+
+      # main is published locally, where the harness CLIs live. CI's part is
+      # to prove the published tree rebuilds from the source commit it names,
+      # and on a release tag, that the tag names that commit and its version.
+      - name: Verify main reproduces from its recorded source commit
+        shell: devenv shell -- bash -e {0}
+        run: |
+          args=(--verify origin/main --reachable-from origin/src)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            args+=(--tag "$GITHUB_REF_NAME")
+          fi
+          uv run build/publish.py "${args[@]}"
 
       - name: Export the floor interpreter closure for the cache
         shell: devenv shell -- bash -e {0}
