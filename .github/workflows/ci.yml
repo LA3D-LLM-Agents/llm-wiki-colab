@@ -26,12 +26,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/llm-wiki-floor
-          key: floor-${{ runner.os }}-${{ hashFiles('devenv.nix', 'devenv.lock') }}
+          key: floor-nar-${{ runner.os }}-${{ hashFiles('devenv.nix', 'devenv.lock') }}
 
       - name: Import the cached closure into the store
         run: |
-          if [ -d ~/.cache/llm-wiki-floor ]; then
-            nix copy --all --no-check-sigs --from "file://$HOME/.cache/llm-wiki-floor"
+          if [ -f ~/.cache/llm-wiki-floor/closure.nar ]; then
+            nix-store --import < ~/.cache/llm-wiki-floor/closure.nar
           fi
 
       - name: Build the shell and run the test tasks
@@ -39,4 +39,8 @@ jobs:
 
       - name: Export the floor interpreter closure for the cache
         shell: devenv shell -- bash -e {0}
-        run: nix copy --to "file://$HOME/.cache/llm-wiki-floor" "$LLM_WIKI_BASH32"
+        run: |
+          set -o pipefail
+          mkdir -p ~/.cache/llm-wiki-floor
+          nix-store --query --requisites "$LLM_WIKI_BASH32" \
+            | xargs nix-store --export > ~/.cache/llm-wiki-floor/closure.nar
