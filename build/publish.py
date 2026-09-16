@@ -260,12 +260,12 @@ def release_tag(version: str) -> str:
 def check_release_tag(version: str, source_ref: str) -> str | None:
     """Refuse when the release tag already names a different source commit.
 
-    Returns the existing tag's commit when the tag already points where this
-    publish would put it, so the caller can leave it alone.
+    Returns the existing tag object so the transaction can verify it has not
+    changed, preserving annotated tags as well as lightweight tags.
     """
     tag = release_tag(version)
-    existing = resolve_ref(f"refs/tags/{tag}")
-    if existing is not None and existing != source_ref:
+    existing = git_optional("rev-parse", "--verify", f"refs/tags/{tag}")
+    if existing is not None and resolve_ref(f"refs/tags/{tag}") != source_ref:
         raise PublishError(
             f"tag {tag} already names {existing[:12]}, not source {source_ref[:12]}; "
             "a version publishes from one source commit, so bump VERSION or "
@@ -274,10 +274,30 @@ def check_release_tag(version: str, source_ref: str) -> str | None:
     return existing
 
 
-def mint_release_tag(version: str, source_ref: str) -> str:
-    """Tag the source commit with the version it shipped as."""
+def update_release_refs(
+    new_commit: str, old_commit: str | None, version: str,
+    source_ref: str, existing_tag: str | None,
+) -> str:
+    """Move main and create or verify its source tag in one transaction."""
     tag = release_tag(version)
-    cas_ref(f"refs/tags/{tag}", source_ref, NULL_OID)
+    tag_command = (
+        f"verify refs/tags/{tag} {existing_tag}"
+        if existing_tag else f"create refs/tags/{tag} {source_ref}"
+    )
+    result = subprocess.run(
+        ["git", "update-ref", "--stdin"],
+        input=(
+            "start\n"
+            f"update refs/heads/{BOOTSTRAP_BRANCH} {new_commit} {old_commit or NULL_OID}\n"
+            f"{tag_command}\nprepare\ncommit\n"
+        ),
+        cwd=str(REPO_ROOT), capture_output=True, text=True, check=False,
+        env=base_git_env(),
+    )
+    if result.returncode != 0:
+        raise PublishError(
+            f"release ref transaction refused; nothing published: {result.stderr.strip() or 'no output'}"
+        )
     return tag
 
 
@@ -524,10 +544,11 @@ def publish(args: argparse.Namespace) -> int:
         "-m",
         build_message(source_ref, file_count, version, not args.skip_gates),
     )
-    update_ref(branch, new_commit, branch_tip)
     tag = None
     if branch == BOOTSTRAP_BRANCH:
-        tag = release_tag(version) if existing_tag else mint_release_tag(version, source_ref)
+        tag = update_release_refs(new_commit, branch_tip, version, source_ref, existing_tag)
+    else:
+        update_ref(branch, new_commit, branch_tip)
 
     print("")
     print(f"branch:     {branch}")

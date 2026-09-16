@@ -19,8 +19,8 @@ VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 SCRATCH="$(mk_scratch https://github.com/LA3D-LLM-Agents/llm-wiki-colab.git)"
 trap 'rm -rf "$SCRATCH"' EXIT INT TERM
 
-# tests/ is deliberately NOT copied: every publish passes --skip-gates, and a
-# forgotten flag then fails loudly instead of recursing into this file.
+# tests/ is deliberately NOT copied: a forgotten --skip-gates fails loudly
+# instead of recursing. The tag-race cases create their own gate runner.
 cp -r "$ROOT/build" "$ROOT/plugins" "$SCRATCH/"
 cp "$ROOT/CITATION.cff" "$ROOT/LICENSE" "$ROOT/VERSION" "$SCRATCH/"
 
@@ -53,6 +53,26 @@ assert_contains "$(git -C "$SCRATCH" log -1 --format=%b pub)" "gates: skipped" \
     "the publish commit records that the suite was skipped"
 
 # --- 2. a publish to main tags the source commit -----------------------------
+# A ref lock can fail after the preflight. Neither ref may move, and retrying
+# after removing the lock must publish both refs without manual recovery.
+for locked_ref in "refs/tags/v$VERSION" refs/heads/main; do
+    touch "$SCRATCH/.git/$locked_ref.lock"
+    pub --branch main --skip-gates --allow-main
+    [ "$STATUS" -eq 1 ] && _pass "locked $locked_ref refuses publish" \
+        || _fail "locked $locked_ref did not refuse publish: $OUTPUT"
+    assert_contains "$OUTPUT" "cannot lock ref" "ref lock reaches the Git transaction"
+    [ "$(tip refs/heads/main)" = "$BOOT" ] \
+        && _pass "locked $locked_ref leaves main at its original commit" \
+        || _fail "locked $locked_ref moved main"
+    rm "$SCRATCH/.git/$locked_ref.lock"
+    pub --branch main --skip-gates --allow-main
+    [ "$STATUS" -eq 0 ] && [ "$(tip "refs/tags/v$VERSION")" = "$SEED" ] \
+        && _pass "retry after unlocking $locked_ref publishes the source tag" \
+        || _fail "retry after unlocking $locked_ref failed to publish the source tag: $OUTPUT"
+    git -C "$SCRATCH" update-ref refs/heads/main "$BOOT"
+    git -C "$SCRATCH" update-ref -d "refs/tags/v$VERSION"
+done
+
 pub --branch main --skip-gates --allow-main
 [ "$STATUS" -eq 0 ] && _pass "publish to main succeeds" \
     || _fail "publish to main failed (exit $STATUS): $OUTPUT"
@@ -150,5 +170,45 @@ pub --branch main --skip-gates --allow-main
 pub --verify main --allow-skipped-gates --tag v99.0.1 --reachable-from src
 [ "$STATUS" -eq 0 ] && _pass "a clean publish verifies with its tag and source branch" \
     || _fail "--verify refused a clean publish (exit $STATUS): $OUTPUT"
+
+# --- 8. an existing annotated tag must survive unchanged through the gates ---
+echo "99.0.2" > "$SCRATCH/VERSION"
+git -C "$SCRATCH" add VERSION
+git -C "$SCRATCH" commit -qm "chore: bump to 99.0.2"
+SOURCE4="$(tip HEAD)"
+BEFORE="$(tip refs/heads/main)"
+mkdir -p "$SCRATCH/tests"
+# This gate simulates another process changing the tag after preflight.
+cat > "$SCRATCH/tests/run.sh" <<'SH'
+#!/usr/bin/env bash
+if [ "$RELEASE_TEST_ACTION" = delete ]; then
+    git update-ref -d refs/tags/v99.0.2
+else
+    git update-ref refs/tags/v99.0.2 "$RELEASE_TEST_TARGET"
+fi
+SH
+export RELEASE_TEST_TARGET="$BOOT"
+for RELEASE_TEST_ACTION in delete move; do
+    export RELEASE_TEST_ACTION
+    git -C "$SCRATCH" tag -a v99.0.2 "$SOURCE4" -m "release annotation"
+    pub --branch main --allow-main
+    [ "$STATUS" -eq 1 ] && _pass "a tag $RELEASE_TEST_ACTION during gates refuses publish" \
+        || _fail "a tag $RELEASE_TEST_ACTION during gates was accepted: $OUTPUT"
+    assert_contains "$OUTPUT" "===== gates" "the tag mutation runs after preflight"
+    [ "$(tip refs/heads/main)" = "$BEFORE" ] \
+        && _pass "a tag $RELEASE_TEST_ACTION during gates leaves main unchanged" \
+        || _fail "a tag $RELEASE_TEST_ACTION during gates moved main"
+    git -C "$SCRATCH" update-ref refs/heads/main "$BEFORE"
+    git -C "$SCRATCH" update-ref -d refs/tags/v99.0.2
+done
+git -C "$SCRATCH" tag -a v99.0.2 "$SOURCE4" -m "release annotation"
+ANNOTATED="$(tip refs/tags/v99.0.2)"
+pub --branch main --skip-gates --allow-main
+[ "$STATUS" -eq 0 ] && [ "$(tip refs/tags/v99.0.2)" = "$ANNOTATED" ] \
+    && _pass "publish preserves an existing annotated tag object" \
+    || _fail "publish refused or replaced an existing annotated tag: $OUTPUT"
+pub --verify main --allow-skipped-gates --tag v99.0.2
+[ "$STATUS" -eq 0 ] && _pass "the annotated release tag verifies" \
+    || _fail "the annotated release tag did not verify: $OUTPUT"
 
 exit "$ASSERT_FAIL"
