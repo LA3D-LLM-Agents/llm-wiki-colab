@@ -7,19 +7,26 @@
 
 The script assembles the artifact tree into a scratch directory, runs the
 behavior suite against that tree, and appends exactly one commit of pure build
-output to the target branch using a temporary index. The working copy is never
+output to the target branch using a temporary index. A publish to main also
+tags the source commit with the version it shipped. The working copy is never
 touched and nothing is pushed; pushing is the caller's job.
+
+--verify REF rebuilds the artifact from the source commit a publish commit
+records and refuses unless the tree hashes match, so a second machine can
+prove a published tree is exactly what its source says it is.
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
 
@@ -30,6 +37,7 @@ TEST_RUNNER = REPO_ROOT / "tests" / "run.sh"
 
 BOOTSTRAP_BRANCH = "main"
 NULL_OID = "0" * 40
+TAG_PREFIX = "v"
 
 # Where a published tree states its version. VERSION_PATH is what every tree
 # built after the VERSION file landed carries; the legacy paths are the emitted
@@ -46,6 +54,8 @@ LEGACY_VERSION_PATHS = (
 # the string as a cache directory name, so 01.2.3 would be a distinct cache
 # entry the gate then reads back as a confusing previous version.
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+TRAILER_RE = re.compile(r"^([a-z][a-z-]*): (.+)$")
+OWNER_REPO_RE = re.compile(r"[:/]([^/:]+)/([^/]+)$")
 
 # Ambient git redirection (GIT_DIR and friends, exported by git hooks, bisect
 # run, and some CI wrappers) would point every plumbing call here at a
@@ -117,12 +127,20 @@ def tool_version(command: list[str]) -> str:
     return result.stdout.strip().splitlines()[0] if result.stdout.strip() else "unknown"
 
 
-def run_assemble(out: Path, source_ref: str) -> int:
+def run_assemble(
+    out: Path,
+    source_ref: str,
+    assemble: Path = ASSEMBLE,
+    owner_repo: str | None = None,
+) -> int:
     """Assemble the artifact tree and return the emitted file count."""
     print(f"===== assemble ({out}) =====", flush=True)
+    command = ["uv", "run", str(assemble), "--out", str(out), "--source-ref", source_ref]
+    if owner_repo:
+        command += ["--owner-repo", owner_repo]
     result = subprocess.run(
-        ["uv", "run", str(ASSEMBLE), "--out", str(out), "--source-ref", source_ref],
-        cwd=str(REPO_ROOT),
+        command,
+        cwd=str(assemble.parent.parent),
         capture_output=True,
         text=True,
         check=False,
@@ -179,8 +197,14 @@ def write_tree(out: Path) -> str:
         return git(*common, "write-tree", env=env, cwd=out)
 
 
-def build_message(source_ref: str, file_count: int, version: str) -> str:
-    """Compose the publish commit message."""
+def build_message(
+    source_ref: str, file_count: int, version: str, gates_ran: bool
+) -> str:
+    """Compose the publish commit message.
+
+    Every line after the subject is a trailer that --verify reads back, so the
+    commit says for itself whether the suite ran.
+    """
     short = source_ref[:12]
     return "\n".join(
         [
@@ -188,6 +212,7 @@ def build_message(source_ref: str, file_count: int, version: str) -> str:
             "",
             f"version: {version}",
             f"source-ref: {source_ref}",
+            f"gates: {'ran' if gates_ran else 'skipped'}",
             f"claude-cli: {tool_version(['claude', '--version'])}",
             f"codex-cli: {tool_version(['codex', '--version'])}",
             f"assembled-files: {file_count}",
@@ -196,10 +221,18 @@ def build_message(source_ref: str, file_count: int, version: str) -> str:
     )
 
 
-def update_ref(branch: str, new_commit: str, old_commit: str | None) -> None:
-    """Compare-and-swap the branch ref, failing loudly if it moved underneath us."""
-    ref = f"refs/heads/{branch}"
-    expected = old_commit if old_commit else NULL_OID
+def parse_trailers(message: str) -> dict[str, str]:
+    """Read the key: value lines out of a publish commit message."""
+    trailers: dict[str, str] = {}
+    for line in message.splitlines():
+        match = TRAILER_RE.match(line.strip())
+        if match:
+            trailers.setdefault(match.group(1), match.group(2).strip())
+    return trailers
+
+
+def cas_ref(ref: str, new_commit: str, expected: str) -> None:
+    """Compare-and-swap a ref, failing loudly if it moved underneath us."""
     result = subprocess.run(
         ["git", "update-ref", ref, new_commit, expected],
         cwd=str(REPO_ROOT),
@@ -213,6 +246,75 @@ def update_ref(branch: str, new_commit: str, old_commit: str | None) -> None:
             f"update-ref {ref} refused (expected old value "
             f"{expected}): {result.stderr.strip() or 'no output'}"
         )
+
+
+def update_ref(branch: str, new_commit: str, old_commit: str | None) -> None:
+    """Move a branch to the new commit, refusing if its tip changed meanwhile."""
+    cas_ref(f"refs/heads/{branch}", new_commit, old_commit or NULL_OID)
+
+
+def release_tag(version: str) -> str:
+    return f"{TAG_PREFIX}{version}"
+
+
+def check_release_tag(version: str, source_ref: str) -> str | None:
+    """Refuse when the release tag already names a different source commit.
+
+    Returns the existing tag's commit when the tag already points where this
+    publish would put it, so the caller can leave it alone.
+    """
+    tag = release_tag(version)
+    existing = resolve_ref(f"refs/tags/{tag}")
+    if existing is not None and existing != source_ref:
+        raise PublishError(
+            f"tag {tag} already names {existing[:12]}, not source {source_ref[:12]}; "
+            "a version publishes from one source commit, so bump VERSION or "
+            "delete the stale tag"
+        )
+    return existing
+
+
+def mint_release_tag(version: str, source_ref: str) -> str:
+    """Tag the source commit with the version it shipped as."""
+    tag = release_tag(version)
+    cas_ref(f"refs/tags/{tag}", source_ref, NULL_OID)
+    return tag
+
+
+def default_owner_repo() -> str:
+    """OWNER/REPO from the origin remote, for an assemble run outside the repo."""
+    url = git_optional("remote", "get-url", "origin")
+    if not url:
+        raise PublishError(
+            "no git remote 'origin'; pass --owner-repo OWNER/REPO explicitly"
+        )
+    match = OWNER_REPO_RE.search(url.strip().removesuffix(".git"))
+    if not match:
+        raise PublishError(f"cannot parse OWNER/REPO from remote url: {url!r}")
+    return f"{match.group(1)}/{match.group(2)}"
+
+
+def extract_source(commit: str, dest: Path) -> None:
+    """Materialize a commit's tree at dest, exactly as committed.
+
+    The working copy is never used: a publish made with uncommitted edits is
+    one of the things --verify exists to catch.
+    """
+    result = subprocess.run(
+        ["git", "archive", "--format=tar", commit],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        check=False,
+        env=base_git_env(),
+    )
+    if result.returncode != 0:
+        raise PublishError(
+            f"git archive {commit[:12]} failed: "
+            f"{result.stderr.decode(errors='replace').strip() or 'no output'}"
+        )
+    dest.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(result.stdout)) as archive:
+        archive.extractall(dest, filter="data")
 
 
 def parse_semver(text: str, origin: str) -> tuple[int, int, int]:
@@ -306,7 +408,16 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Assemble, gate, and append one build commit to a branch."
     )
-    parser.add_argument("--branch", required=True, help="target branch name")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--branch", help="target branch name")
+    mode.add_argument(
+        "--verify",
+        metavar="REF",
+        help=(
+            "rebuild the artifact from the source commit REF's tip records and "
+            "refuse unless the trees match; publishes nothing"
+        ),
+    )
     parser.add_argument("--source-ref", help="source commit SHA (default: git HEAD)")
     parser.add_argument(
         "--allow-main",
@@ -325,6 +436,25 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
             "publish a changed tree without a VERSION bump; "
             f"refused for {BOOTSTRAP_BRANCH}"
         ),
+    )
+    verify = parser.add_argument_group("verify options")
+    verify.add_argument(
+        "--tag",
+        help="release tag that must name the recorded source commit and its VERSION",
+    )
+    verify.add_argument(
+        "--reachable-from",
+        metavar="REF",
+        help="the recorded source commit must be an ancestor of REF",
+    )
+    verify.add_argument(
+        "--owner-repo",
+        help="OWNER/REPO stamped into the rebuilt tree (default: from origin)",
+    )
+    verify.add_argument(
+        "--allow-skipped-gates",
+        action="store_true",
+        help="accept a publish whose suite did not run (plumbing tests only)",
     )
     return parser.parse_args(argv)
 
@@ -368,6 +498,11 @@ def publish(args: argparse.Namespace) -> int:
             print("nothing to publish")
             return 0
         enforce_version_gate(branch, parent, version, args.force_version)
+        # Tags are minted for main only, and the conflict is checked before the
+        # suite runs so a stale tag costs seconds rather than a full gate run.
+        existing_tag = None
+        if branch == BOOTSTRAP_BRANCH:
+            existing_tag = check_release_tag(version, source_ref)
         if args.skip_gates:
             print(
                 "publish: WARNING: --skip-gates set; the behavior suite did NOT run. "
@@ -385,9 +520,14 @@ def publish(args: argparse.Namespace) -> int:
     if parent:
         commit_args += ["-p", parent]
     new_commit = git(
-        *commit_args, "-m", build_message(source_ref, file_count, version)
+        *commit_args,
+        "-m",
+        build_message(source_ref, file_count, version, not args.skip_gates),
     )
     update_ref(branch, new_commit, branch_tip)
+    tag = None
+    if branch == BOOTSTRAP_BRANCH:
+        tag = release_tag(version) if existing_tag else mint_release_tag(version, source_ref)
 
     print("")
     print(f"branch:     {branch}")
@@ -397,12 +537,107 @@ def publish(args: argparse.Namespace) -> int:
     print(f"parent:     {parent or '(root commit)'}")
     print(f"source ref: {source_ref}")
     print(f"version:    {version}")
+    print(f"tag:        {tag or '(none)'}")
+    return 0
+
+
+def verify(args: argparse.Namespace) -> int:
+    """Rebuild REF's tip from the source commit it records and compare trees."""
+    tip = resolve_ref(args.verify)
+    if tip is None:
+        raise PublishError(f"cannot resolve --verify {args.verify!r}")
+    trailers = parse_trailers(git("log", "-1", "--format=%B", tip))
+    source = trailers.get("source-ref")
+    if not source:
+        raise PublishError(
+            f"{args.verify} ({tip[:12]}) records no source-ref; not a publish commit"
+        )
+    found = parent_version(tip)
+    if found is None:
+        raise PublishError(f"{args.verify} ({tip[:12]}) records no version")
+    version, _ = found
+
+    gates = trailers.get("gates")
+    if gates == "skipped" and not args.allow_skipped_gates:
+        raise PublishError(
+            f"{args.verify} ({tip[:12]}) was published with --skip-gates; "
+            "the behavior suite never ran against this tree"
+        )
+    if gates is None:
+        print(f"verify: note: {tip[:12]} predates the gates trailer; suite status unknown")
+
+    source_commit = resolve_ref(source)
+    if source_commit is None:
+        raise PublishError(
+            f"source commit {source[:12]} is not in this repository; "
+            "fetch the full history of the source branch"
+        )
+
+    if args.tag:
+        if not args.tag.startswith(TAG_PREFIX):
+            raise PublishError(f"--tag {args.tag!r} does not start with {TAG_PREFIX!r}")
+        tag_commit = resolve_ref(f"refs/tags/{args.tag}")
+        if tag_commit is None:
+            raise PublishError(f"tag {args.tag} does not exist")
+        if tag_commit != source_commit:
+            raise PublishError(
+                f"tag {args.tag} names {tag_commit[:12]}, but {args.verify} was "
+                f"published from {source_commit[:12]}"
+            )
+        expected = args.tag[len(TAG_PREFIX):]
+        if expected != version:
+            raise PublishError(
+                f"tag {args.tag} says {expected}, but {args.verify} carries VERSION {version}"
+            )
+
+    if args.reachable_from:
+        base = resolve_ref(args.reachable_from)
+        if base is None:
+            raise PublishError(f"cannot resolve --reachable-from {args.reachable_from!r}")
+        if git_optional("merge-base", "--is-ancestor", source_commit, base) is None:
+            raise PublishError(
+                f"source commit {source_commit[:12]} is not an ancestor of "
+                f"{args.reachable_from} ({base[:12]}); it was rewritten or never pushed"
+            )
+
+    owner_repo = args.owner_repo or default_owner_repo()
+    workdir = Path(tempfile.mkdtemp(prefix="llm-wiki-verify-"))
+    try:
+        src = workdir / "src"
+        extract_source(source_commit, src)
+        assemble = src / "build" / "assemble.py"
+        if not assemble.is_file():
+            raise PublishError(f"source commit {source_commit[:12]} has no build/assemble.py")
+        out = workdir / "tree"
+        run_assemble(out, source_commit, assemble=assemble, owner_repo=owner_repo)
+        tree = write_tree(out)
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+    tip_tree = git("rev-parse", f"{tip}^{{tree}}")
+    print("")
+    print(f"ref:        {args.verify} ({tip[:12]})")
+    print(f"source ref: {source_commit}")
+    print(f"version:    {version}")
+    print(f"gates:      {gates or 'unknown'}")
+    print(f"published:  {tip_tree}")
+    print(f"rebuilt:    {tree}")
+    if tree != tip_tree:
+        changed = git("diff-tree", "-r", "--name-status", tip_tree, tree)
+        raise PublishError(
+            f"rebuilt tree {tree[:12]} differs from published tree {tip_tree[:12]}:\n"
+            + "\n".join(f"  {line}" for line in changed.splitlines())
+        )
+    print("verify: the published tree reproduces from its source commit")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     try:
-        return publish(parse_args(argv))
+        args = parse_args(argv)
+        if args.verify:
+            return verify(args)
+        return publish(args)
     except PublishError as exc:
         print(f"publish: error: {exc}", file=sys.stderr)
         return 1
