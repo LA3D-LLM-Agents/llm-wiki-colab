@@ -2,6 +2,10 @@
 import re
 import subprocess
 
+# Stamped by the index template; when several index_*.md files exist it
+# distinguishes the wiki's catalog from pages whose names start with index_.
+INDEX_MARKER = "Catalog of all wiki pages, organized by category."
+
 ORIENTATION = """<system-reminder>
 This project uses the wiki at .llm-wiki/ as durable memory. It is a separate
 git repository, NOT tracked by the main repo. Read
@@ -24,12 +28,38 @@ User-invocable skills: /wiki-init, /wiki-experiment, /wiki-source, /wiki-lint.
 </system-reminder>"""
 
 
-def run(state):
-    root, wiki = state["project_root"], state["wiki_dir"]
+def origin_name(root):
     origin = subprocess.run(["git", "remote", "get-url", "origin"], cwd=root,
                             capture_output=True, text=True).stdout.strip()
-    name = origin.removesuffix(".git").rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1] if origin else root.name
+    return origin.removesuffix(".git").rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1] if origin else root.name
+
+
+def wiki_name(root, wiki, warnings):
+    """Name the wiki was initialized under: the stem of its stamped index.
+
+    The host origin is only a fallback; it can differ from the stamped name
+    (--repo-name, origin renamed or added after init).
+    """
+    indexes = [p for p in sorted(wiki.glob("index_*.md")) if p.is_file()]
+    if len(indexes) > 1:
+        indexes = [p for p in indexes if INDEX_MARKER in p.read_text(errors="replace")]
+    stems = [p.name[len("index_"):-len(".md")] for p in indexes]
+    if len(stems) == 1:
+        return stems[0]
+    name = origin_name(root)
+    if stems and name not in stems:
+        warnings.append(f"llm-wiki: several wiki indexes found ({', '.join(stems)}); "
+                        f"orienting on {name}, which is not among them.")
+    return name
+
+
+def run(state):
+    root, wiki = state["project_root"], state["wiki_dir"]
+    name = wiki_name(root, wiki, state["warnings"])
     log = wiki / f"log_{name}.md"
+    if not (wiki / f"index_{name}.md").is_file() or not log.is_file():
+        state["warnings"].append(f"llm-wiki: index_{name}.md or log_{name}.md is missing; "
+                                 "the wiki snapshot below is incomplete.")
     log_text = log.read_text() if log.is_file() else ""
     entries = list(re.finditer(r"^## \[", log_text, re.MULTILINE))
     pages = sum(1 for p in wiki.glob("*.md") if p.is_file())
