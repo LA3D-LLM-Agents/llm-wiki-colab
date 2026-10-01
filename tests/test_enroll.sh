@@ -14,4 +14,10 @@ tmp="$(mktemp -d)"
     || _fail "outside-repository exit not 12"
 
 rm -rf "$tmp"
+if uv run --python "$(command -v python3)" --with 'PyYAML>=6,<7' --with 'jsonschema>=4.18,<5' \
+    python "$HERE/mechanics/enroll_test.py"; then
+    _pass "built enrollment behavior checks"
+else
+    _fail "built enrollment behavior checks"
+fi
 exit "$ASSERT_FAIL"
