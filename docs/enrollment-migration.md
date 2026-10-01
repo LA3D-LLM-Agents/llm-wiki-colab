@@ -24,9 +24,8 @@ validation, Ruff and shell syntax checks passed.
 
 The complete behavior runner was exercised with `TMPDIR=/private/tmp` to avoid
 an existing macOS `/var` versus `/private/var` path assertion in initializer tests.
-One unrelated test file could not pass: `test_release_notes.sh` requires
-`git-cliff`, which is unavailable on this machine. The opt-in Cursor smoke was
-skipped. Do not describe this as a fully passing release gate.
+After installing git-cliff 2.14.2, the complete runner passed with zero failing
+test files for version 0.5.0. The opt-in Cursor model smoke was skipped.
 
 An offline check in the fabric repository
 (`docs/agent-card-migration/check_enrollment.py`) ran built enrollment for a new
@@ -38,10 +37,9 @@ publication was performed by those checks.
 ## Release boundary
 
 This is development work on a branch based on `src`; `main` remains generated
-output. No version bump, release, installed-plugin change or deployment has been
-made. Before publishing: finish the full release gates with the required toolchain,
-bump `VERSION`, and use the repository's build/publish workflow. Do not hand-edit
-or force-push `main`.
+output. Version 0.5.0 is prepared with passing release gates. Publish using the
+repository's build/publish workflow, which builds and verifies the committed
+source. Do not hand-edit or force-push `main`.
 
 Publish compatible federation/fabric readers and upgrade connector runtimes before
 publishing migrated cards. The helper can prepare local drafts independently.
