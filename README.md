@@ -86,4 +86,4 @@ A machine-readable `CITATION.cff` is included in the source repository.
 
 ## Provenance
 
-Version 0.4.1, built from src commit ddc9c8a68113e6521b8a52af15e6e22b1a9c71f9.
+Version 0.5.0, built from src commit c0cce7f3b2f78e119da7c12bddfbaea2f8d194d1.
