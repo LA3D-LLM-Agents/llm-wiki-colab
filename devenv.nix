@@ -5,6 +5,8 @@ let
   # macOS ships bash 3.2.57 and Python 3.9. No current distribution packages
   # bash 3.2, so it is built from source here; Python 3.9 comes from the last
   # nixpkgs release that carried it, which cache.nixos.org still serves.
+  # Apple's Command Line Tools stayed on git 2.39 for years; nixos-22.11
+  # carries 2.38.5, the nearest release at or below that.
   bash32 = pkgs.stdenv.mkDerivation {
     pname = "bash";
     version = "3.2.57";
@@ -20,6 +22,29 @@ let
     configureFlags = [ "--without-bash-malloc" ];
   };
   python39 = inputs.nixpkgs-py39.legacyPackages.${pkgs.stdenv.system}.python39;
+  gitFloor = inputs.nixpkgs-git-floor.legacyPackages.${pkgs.stdenv.system}.git;
+  # Everything the suite may run under the floor. PATH is replaced with this,
+  # not prepended to, so a tool missing here is missing for the run.
+  floorPath = pkgs.lib.makeBinPath [
+    bash32
+    python39
+    gitFloor
+    pkgs.coreutils
+    pkgs.curl
+    pkgs.diffutils
+    pkgs.file
+    pkgs.findutils
+    pkgs.gawk
+    pkgs.git-cliff
+    pkgs.gnugrep
+    pkgs.gnused
+    pkgs.jq
+    pkgs.jujutsu
+    pkgs.shellcheck
+    pkgs.tmux
+    pkgs.util-linux
+    pkgs.uv
+  ];
 in
 {
   packages = [
@@ -49,13 +74,10 @@ in
     before = [ "devenv:enterTest" ];
   };
 
-  # The same suite with the floor interpreters first on PATH.
+  # The same suite with the floor interpreters and git as the whole PATH.
   tasks."llm-wiki:test-floor" = {
     exec = ''
-      floor="$(mktemp -d)"
-      trap 'rm -rf "$floor"' EXIT
-      ln -s ${bash32}/bin/bash "$floor/bash"
-      PATH="$floor:${python39}/bin:$PATH" bash ./tests/run.sh
+      PATH="${floorPath}" bash ./tests/run.sh
     '';
     before = [ "devenv:enterTest" ];
   };

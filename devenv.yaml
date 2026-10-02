@@ -3,3 +3,5 @@ inputs:
     url: github:cachix/devenv-nixpkgs/rolling
   nixpkgs-py39:
     url: github:NixOS/nixpkgs/nixos-24.11
+  nixpkgs-git-floor:
+    url: github:NixOS/nixpkgs/nixos-22.11
