@@ -90,9 +90,12 @@ TUI exits, two fresh headless sessions must execute the unchanged hook and recei
 distinct tokens in incoming context, with no tool reads or hook-trust bypass.
 Each receipt must identify that invocation's new transcript, excluding evidence
 from the TUI or earlier sessions. The test requires `tmux`; missing prerequisites
-skip explicitly. UI changes fail with terminal captures rather than silently
-injecting trust configuration. This covers the same home, workspace, and installed
-hook definition; updates, other workspaces, and trust revocation remain separate.
+skip explicitly.
+The terminal is read only for shape: a numbered list with the cursor on its first entry, then an input prompt.
+Each answer is confirmed from the persisted `config.toml`: a `trusted` project entry for the workspace, then a `trusted_hash` for the hook.
+Reworded dialogs therefore leave the test unaffected.
+A release that adds, removes, or reorders dialogs or their options fails with terminal captures rather than silently injecting trust configuration.
+This covers the same home, workspace, and installed hook definition; updates, other workspaces, and trust revocation remain separate.
 
 ```sh
 uv run --with pytest python -B -m pytest tests/harness/test_codex_trust.py --run-live --keep -s
@@ -283,8 +286,8 @@ termination can leave scratch data behind.
 - `test_session_context.py`: SessionStart delivery and Codex default-trust cases.
 - `codex_trust.py`, `test_codex_trust.py`: terminal-driven hook approval and
   persistence into fresh exec sessions sharing an isolated home.
-- `test_codex_trust_audit.py`: shared-home transcript selection and stale-evidence
-  exclusion.
+- `test_codex_trust_audit.py`: shared-home transcript selection, stale-evidence
+  exclusion, and terminal shape reading against captured screens.
 - `test_post_write.py`: native file-write tools and post-tool advisory delivery.
 - `test_conversation.py`, `test_skill_*_audit.py`: offline parser and assertion tests.
 - `test_session_context_audit.py`: offline context delivery controls.

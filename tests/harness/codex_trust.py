@@ -1,22 +1,50 @@
 """Exercise Codex hook approval through a private terminal and persisted home."""
 
 import json
+import re
 import shlex
 import subprocess
 import time
 import tomllib
+from pathlib import Path
 
 from .conversation import parse_codex
 from .harness_support import REPO
 
+# Codex rewords its dialogs between releases, so the terminal is read only for
+# shape: numbered options under a cursor, or an input prompt. What each answer
+# did is read back from the persisted config, never from the screen.
+OPTION = re.compile(r"^\s*(›\s+)?\d+\.\s+(\S.*?)\s*$")
+PROMPT = re.compile(r"^\s*›\s+\S")
+
+
+def choices(text):
+    """Options of a selection list whose cursor rests on its first entry."""
+    found = [match for match in map(OPTION.match, text.splitlines()) if match]
+    if not found or not found[0].group(1) or any(match.group(1) for match in found[1:]):
+        return ()
+    return tuple(match.group(2) for match in found)
+
+
+def composer_ready(text):
+    lines = text.splitlines()
+    return not any(map(OPTION.match, lines)) and any(map(PROMPT.match, lines))
+
+
+def persisted_config(probe):
+    config = probe / "codex/config.toml"
+    return tomllib.loads(config.read_text()) if config.exists() else {}
+
 
 def hook_trust(probe):
-    config = probe / "codex/config.toml"
-    if not config.exists():
-        return {}
     return {key: state["trusted_hash"]
-            for key, state in tomllib.loads(config.read_text()).get("hooks", {}).get("state", {}).items()
+            for key, state in persisted_config(probe).get("hooks", {}).get("state", {}).items()
             if state.get("trusted_hash")}
+
+
+def workspace_trusted(probe, workspace):
+    return any(state.get("trust_level") == "trusted" and Path(key).resolve() == workspace.resolve()
+               for key, state in persisted_config(probe).get("projects", {}).items())
 
 
 def approve_codex_hooks(run, probe):
@@ -42,17 +70,13 @@ def approve_codex_hooks(run, probe):
     def wait_for(description, predicate):
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
-            if predicate():
-                return
+            found = predicate()
+            if found:
+                return found
             if exited.exists():
                 raise RuntimeError(f"Codex TUI exited before {description}; see {log}")
             time.sleep(0.2)
         raise RuntimeError(f"Timed out waiting for {description}; see {log}")
-
-    def hook_review_visible():
-        text = screen()
-        return all(part in text for part in (
-            "Hooks need review", "1 hook is new or changed.", "Trust all and continue"))
 
     args = [str(REPO / "scripts/isolated-codex.sh"), "--no-alt-screen", "-m", run.resolved_model]
     # The shell records wrapper completion, including its credential cleanup.
@@ -60,12 +84,20 @@ def approve_codex_hooks(run, probe):
     try:
         tmux("-f", "/dev/null", "new-session", "-d", "-s", "trust", "-x", "120", "-y", "40",
              "-c", str(run.workspace), command)
-        wait_for("workspace review", lambda: "Do you trust the contents of this directory?" in screen())
+        workspace_review = wait_for("workspace review", lambda: choices(screen()))
         tmux("send-keys", "-t", "trust", "Enter")
-        wait_for("single fixture hook review", hook_review_visible)
+        wait_for("persisted workspace trust", lambda: workspace_trusted(probe, run.workspace))
+
+        def hook_review():
+            found = choices(screen())
+            return len(found) > 1 and found != workspace_review
+
+        wait_for("hook review", hook_review)
+        # The second entry trusts every pending hook. A release that reorders
+        # the list persists no approval, and the next wait fails with a capture.
         tmux("send-keys", "-t", "trust", "Down", "Enter")
-        wait_for("persisted hook approval", lambda: bool(hook_trust(probe)))
-        wait_for("ready composer", lambda: "Ask Codex to do anything" in screen())
+        wait_for("persisted hook approval", lambda: hook_trust(probe))
+        wait_for("ready composer", lambda: composer_ready(screen()))
         tmux("send-keys", "-t", "trust", "-l", "/exit")
         # Codex buffers rapid character bursts; submitting before rendering can
         # make Enter part of the paste instead of executing the slash command.

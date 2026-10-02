@@ -5,7 +5,7 @@ import shutil
 
 import pytest
 
-from .codex_trust import approve_codex_hooks, exec_with_persisted_home, hook_trust
+from .codex_trust import approve_codex_hooks, exec_with_persisted_home, hook_trust, workspace_trusted
 from .harness_support import write_json
 from .plugin_install import install_fixture
 from .session_context import TOKEN, make_session_fixture, session_evidence
@@ -35,6 +35,7 @@ def test_codex_hook_trust_persists_from_tui_to_exec(harness, harness_run):
     assert not TOKEN.search(output)
     assert not any(TOKEN.search(text) for _, text in conversation.incoming)
     assert not hook_trust(probe), "headless execution unexpectedly granted hook trust"
+    assert not workspace_trusted(probe, run.workspace), "headless execution unexpectedly granted workspace trust"
     run.record("before_approval", {"hook_executed": False, "context_received": False})
 
     approve_codex_hooks(run, probe)
