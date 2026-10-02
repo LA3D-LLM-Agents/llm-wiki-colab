@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """update_wiki fast-forward mechanics: clean-FF, dirty gate, divergence, guard.
 
-Exercises the update stage directly against real git (and real jj, when
-available). Usage: update_mechanics_test.py <path-to-20-update-wiki.py>
+Exercises the update stage directly against real git.
+Usage: update_mechanics_test.py <path-to-20-update-wiki.py>
 
 Each check is built to discriminate (observe-the-failure): the happy path
 asserts HEAD actually moved from a known-behind state to the upstream tip; the
 dirty gate is proved by removing the dirtiness and watching the SAME repo then
 advance, so a silently-broken fast-forward would fail the contrast rather than
-pass. The jj block covers the case git status must catch but jj would not have
-snapshotted: a tracked edit on disk with no jj command run since.
+pass.
 """
 import importlib.util
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,7 +27,6 @@ ENV = {
     **os.environ,
     "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
-    "JJ_CONFIG": os.devnull,
 }
 
 results = []
@@ -40,14 +37,6 @@ def check(label, cond):
 def git(*args, cwd=None):
     return subprocess.run(["git", *args], cwd=cwd, env=ENV,
                           capture_output=True, text=True)
-
-
-def jj(*args, cwd=None):
-    return subprocess.run(
-        ["jj", "--config", "user.name=t", "--config", "user.email=t@t",
-         "--config", "ui.color=never", *args],
-        cwd=cwd, env=ENV, capture_output=True, text=True,
-    )
 
 
 def head(repo):
@@ -105,6 +94,21 @@ with tempfile.TemporaryDirectory() as td:
     r = ew.update_wiki(wiki)
     check("git uptodate: reports refreshed memory", "refresh complete" in r)
     check("git uptodate: HEAD unchanged", head(wiki) == before)
+
+    # ---- GIT: no origin/HEAD -> default branch asked of the remote ----
+    # Not every clone populates origin/HEAD; branch detection must then fall
+    # back to `git remote show origin` rather than give up.
+    bare, seed = make_upstream(base, "g_nohead")
+    wiki = base / "g_nohead.wiki"
+    git("clone", "-q", str(bare), str(wiki))
+    git("-C", str(wiki), "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+    advance(seed, bare, "B")
+    check("git no-origin-HEAD: precondition — origin/HEAD is unset",
+          git("-C", str(wiki), "symbolic-ref", "--quiet",
+              "refs/remotes/origin/HEAD").returncode != 0)
+    r = ew.update_wiki(wiki)
+    check("git no-origin-HEAD: reports refreshed memory", "refresh complete" in r)
+    check("git no-origin-HEAD: HEAD advanced to upstream tip", head(wiki) == tip(bare))
 
     # ---- GIT: dirty (untracked) + behind -> gate blocks the FF ----
     # Contrast: clear the dirtiness and the SAME repo advances, proving the
@@ -227,38 +231,6 @@ with tempfile.TemporaryDirectory() as td:
     check("guard: non-own-repo wiki dir -> returns None", r is None)
     check("guard: parent NOT fast-forwarded (HEAD unchanged, still behind)",
           head(parent) == parent_before and head(parent) != tip(bare))
-
-    # ---- JJ: colocated cases (skipped cleanly when jj is unavailable) ----
-    if shutil.which("jj"):
-        # Colocated clone: detached HEAD, no origin/HEAD (forces the remote-show
-        # branch detection), jj imports the moved ref lazily.
-        bare, seed = make_upstream(base, "j_happy")
-        wiki = base / "j_happy.wiki"
-        jj("git", "clone", "--colocate", str(bare), str(wiki))
-        check("jj happy: precondition — colocated clone has no origin/HEAD",
-              git("-C", str(wiki), "symbolic-ref", "--quiet",
-                  "refs/remotes/origin/HEAD").returncode != 0)
-        advance(seed, bare, "B")
-        check("jj happy: precondition — clone is behind upstream", head(wiki) != tip(bare))
-        r = ew.update_wiki(wiki)
-        check("jj happy: reports refreshed memory", "refresh complete" in r)
-        check("jj happy: HEAD advanced to upstream tip", head(wiki) == tip(bare))
-
-        # The case git status must catch but jj has NOT snapshotted: a tracked
-        # edit written straight to disk with no jj command run since.
-        bare, seed = make_upstream(base, "j_edit")
-        wiki = base / "j_edit.wiki"
-        jj("git", "clone", "--colocate", str(bare), str(wiki))
-        advance(seed, bare, "B")
-        (wiki / "index.md").write_text("A\nUNSNAPSHOTTED\n")  # no jj command after
-        before = head(wiki)
-        r = ew.update_wiki(wiki)
-        check("jj unsnapshotted-edit: reports preserved local changes", "local changes preserved" in r)
-        check("jj unsnapshotted-edit: HEAD NOT advanced", head(wiki) == before)
-        check("jj unsnapshotted-edit: on-disk edit preserved",
-              (wiki / "index.md").read_text() == "A\nUNSNAPSHOTTED\n")
-    else:
-        check("jj cases SKIPPED (jj not on PATH)", True)
 
 failed = [l for l, c in results if not c]
 for l, c in results:
