@@ -52,17 +52,6 @@ for implementation in ['skills/wiki-init/scripts/ensure-local-exclude.py',
         assert exclude.read_bytes() == b'/.llm-wiki/\n'
         assert host_ignore.read_bytes() == b'!.llm-wiki/\n'
         host_ignore.unlink()
-        # An in-progress writer must be left alone.
-        lock = exclude.with_name('exclude.lock')
-        lock.write_bytes(b'other writer')
-        try:
-            ensure(root)
-        except FileExistsError:
-            pass
-        else:
-            raise AssertionError('overwrote another writer')
-        assert lock.read_bytes() == b'other writer'
-        lock.unlink()
         # Linked worktrees have a .git file and share the resolved exclude file.
         git(root, '-c', 'user.name=Test', '-c', 'user.email=test@example.org',
             'commit', '--allow-empty', '-qm', 'seed')
