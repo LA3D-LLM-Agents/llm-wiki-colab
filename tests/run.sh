@@ -59,6 +59,16 @@ if [ ! -d "$PLUGIN_ROOT" ]; then
     exit 1
 fi
 
+# Windows refuses to delete or rename a file that is still open, and POSIX
+# does not, so code relying on it passes here and fails there. The shim makes
+# Python refuse it too. It only ever turns a success into an error, so the
+# suite runs under it throughout; it reads /proc/self/fd, which limits it to
+# Linux. The build above is deliberately left out.
+if [ -d /proc/self/fd ]; then
+    PYTHONPATH="$HERE/lib/open-handle-shim${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH
+fi
+
 FAIL=0
 for t in "$HERE"/test_*.sh; do
     echo "===== $(basename "$t") ====="
