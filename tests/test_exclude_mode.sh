@@ -28,8 +28,12 @@ for mode in 664 600; do
 
     assert_not_contains "$out" "could not ensure the local wiki ignore rule" \
         "mode $mode: hook reports no exclude failure"
-    # The rule landing proves the rewrite ran; without it the mode check is vacuous.
-    assert_grep_file "$exclude" "/.llm-wiki/" "mode $mode: hook appended the wiki rule"
+    # Git ignoring the wiki proves the rewrite ran; without it the mode check is vacuous.
+    if git -C "$host" check-ignore -q .llm-wiki/; then
+        _pass "mode $mode: git ignores the wiki after the hook"
+    else
+        _fail "mode $mode: git does not ignore the wiki after the hook"
+    fi
     after="$(stat -c %a "$exclude")"
     if [ "$after" = "$mode" ]; then
         _pass "mode $mode: exclude keeps its mode across the rewrite"
