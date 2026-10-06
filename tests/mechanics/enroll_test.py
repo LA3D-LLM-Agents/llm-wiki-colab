@@ -3,6 +3,8 @@
 import copy
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +19,18 @@ HELPER = PLUGIN / "skills/wiki-enroll/scripts/enroll.py"
 SCHEMA = json.loads(
     (PLUGIN / "skills/wiki-enroll/references/agent-card-1.0.schema.json").read_text()
 )
+
+
+def find_git() -> str:
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("git is not on PATH")
+    return git
+
+
+# Resolved once, before the tests put a wrapper named git first on PATH; the
+# wrapper needs the real path to avoid calling itself.
+GIT = find_git()
 
 
 class EnrollmentTests(unittest.TestCase):
@@ -54,7 +68,8 @@ class EnrollmentTests(unittest.TestCase):
         )
         (self.bin / "gh").chmod(0o755)
         (self.bin / "git").write_text(
-            '#!/bin/sh\nif [ "$1" = ls-remote ]; then exit 128; fi\nexec /usr/bin/git "$@"\n'
+            '#!/bin/sh\nif [ "$1" = ls-remote ]; then exit 128; fi\n'
+            f'exec {shlex.quote(GIT)} "$@"\n'
         )
         (self.bin / "git").chmod(0o755)
         self.env = dict(
@@ -67,7 +82,7 @@ class EnrollmentTests(unittest.TestCase):
 
     def git(self, cwd, *args):
         return subprocess.check_output(
-            ["/usr/bin/git", "-C", str(cwd), *args], text=True
+            [GIT, "-C", str(cwd), *args], text=True
         ).strip()
 
     def invoke(self, *args, success=True, stdin="", helper=HELPER, env=None):
