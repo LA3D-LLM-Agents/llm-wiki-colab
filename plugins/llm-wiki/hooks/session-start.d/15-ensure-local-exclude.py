@@ -34,7 +34,7 @@ def ensure_local_exclude(repo_root: Path) -> None:
                 output.write(content + separator + rule + newline)
                 output.flush()
                 if path.exists():
-                    os.fchmod(output.fileno(), path.stat().st_mode & 0o777)
+                    os.chmod(lock, path.stat().st_mode & 0o777)
                 os.replace(lock, path)
                 replaced = True
             # A tracked .gitignore negation takes precedence over local excludes.
