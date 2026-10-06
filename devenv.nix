@@ -50,6 +50,7 @@ in
   packages = [
     pkgs.act
     pkgs.actionlint
+    pkgs.basedpyright
     pkgs.git
     pkgs.git-cliff
     pkgs.jq
@@ -66,6 +67,21 @@ in
 
   tasks."llm-wiki:lint-workflows" = {
     exec = "actionlint";
+    before = [ "devenv:enterTest" ];
+  };
+
+  # The shipped scripts are checked once per platform a user may run them on,
+  # so an API missing on one of them is an error here. The floor Python and
+  # the rule set live in pyrightconfig.json.
+  tasks."llm-wiki:lint-python" = {
+    exec = ''
+      status=0
+      for platform in Windows Darwin Linux; do
+        echo "===== basedpyright: $platform ====="
+        basedpyright --pythonplatform "$platform" || status=1
+      done
+      exit "$status"
+    '';
     before = [ "devenv:enterTest" ];
   };
 
